@@ -170,6 +170,54 @@
     margin-top: 3px;
   }
 
+  .upload-existing {
+    margin-top: 20px;
+  }
+
+  .upload-divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+
+  .upload-divider::before, .upload-divider::after {
+    content: "";
+    flex: 1;
+    border-top: 1px solid var(--border);
+  }
+
+  .upload-divider span {
+    padding: 0 10px;
+  }
+
+  .upload-btn {
+    display: block;
+    width: 100%;
+    text-align: center;
+    padding: 12px;
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--accent);
+    background: #eef2fa;
+    border: 1px dashed var(--accent);
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  .upload-status {
+    font-size: 12px;
+    font-weight: 600;
+    margin-top: 8px;
+  }
+
+  .upload-status.ok { color: #1a7f37; }
+  .upload-status.error { color: #b33; }
+
   /* Sample data pre-filling an untouched field -- a click/focus selects it
      and this styling drops off (see the JS focus handler). */
   .field input.mock-value, .field textarea.mock-value {
@@ -672,6 +720,14 @@
         <div class="field"><label>Location</label><input id="f-location" type="text" placeholder="Bengaluru, India"></div>
         <div class="field"><label>LinkedIn / Website</label><input id="f-link" type="text" placeholder="linkedin.com/in/jordan"></div>
       </div>
+
+      <div class="upload-existing">
+        <div class="upload-divider"><span>or</span></div>
+        <label class="upload-btn" for="resume-upload-input">📄 Already have a resume? Upload it</label>
+        <input id="resume-upload-input" type="file" accept=".pdf,.txt" style="display:none">
+        <div class="hint">PDF or .txt — we'll pull the text into Summary so you can copy details into the right steps. We can't reliably auto-sort it into fields, so it needs a quick review.</div>
+        <div class="upload-status" id="upload-status"></div>
+      </div>
     </div>
 
     <div class="section" data-step="1">
@@ -853,6 +909,92 @@
       el.classList.remove("mock-value");
     }
   }, true);
+
+  // ── Upload an existing resume: extract its text and drop it into Summary.
+  // No reliable way to auto-sort arbitrary resume text into name/experience/
+  // education fields without a real parsing service, so this deliberately
+  // doesn't pretend to -- it just saves retyping, review/reorganize by hand. ──
+
+  let pdfJsLoadPromise = null;
+
+  function loadPdfJs() {
+    if (window.pdfjsLib) return Promise.resolve();
+    if (pdfJsLoadPromise) return pdfJsLoadPromise;
+    pdfJsLoadPromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.js";
+      script.onload = () => {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+          "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js";
+        resolve();
+      };
+      script.onerror = () => reject(new Error("Couldn't load the PDF reader (no internet?)."));
+      document.head.appendChild(script);
+    });
+    return pdfJsLoadPromise;
+  }
+
+  async function extractPdfText(file) {
+    await loadPdfJs();
+    const buf = await file.arrayBuffer();
+    const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+    let text = "";
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      text += content.items.map(item => item.str).join(" ") + "\n\n";
+    }
+    return text.trim();
+  }
+
+  function readTextFile(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error("Couldn't read that file."));
+      reader.readAsText(file);
+    });
+  }
+
+  function setUploadStatus(message, ok) {
+    const el = $("#upload-status");
+    el.textContent = message;
+    el.className = "upload-status " + (ok ? "ok" : "error");
+  }
+
+  $("#resume-upload-input").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploadStatus("Reading " + file.name + "…", true);
+
+    try {
+      let text;
+      if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+        text = await extractPdfText(file);
+      } else if (file.type === "text/plain" || file.name.toLowerCase().endsWith(".txt")) {
+        text = await readTextFile(file);
+      } else {
+        setUploadStatus("Only PDF or .txt files can be auto-read -- fill the form manually for other formats.", false);
+        return;
+      }
+
+      if (!text || !text.trim()) {
+        setUploadStatus("Couldn't find any text in that file (is it a scanned image?). Fill the form manually instead.", false);
+        return;
+      }
+
+      const summaryEl = $("#f-summary");
+      const note = "--- Extracted from " + file.name + " -- review and copy details into the right steps below ---\n\n";
+      summaryEl.value = note + text.slice(0, 4000);
+      summaryEl.classList.remove("mock-value");
+      render();
+      setUploadStatus("Extracted " + file.name + " -- opening Summary so you can review it.", true);
+      showWizardStep(1);
+    } catch (err) {
+      setUploadStatus(err.message || "Couldn't extract text from that file.", false);
+    }
+  });
 
   // ── Render preview from current form state ──
 
