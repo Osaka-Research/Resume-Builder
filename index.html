@@ -1012,14 +1012,15 @@
     }
   });
 
-  // First focus on a sample-filled field selects its text so typing over it
-  // is one motion, not select-all-then-type. Capture phase because focus
-  // doesn't bubble.
+  // First focus on a sample-filled field clears the placeholder text so
+  // it's a clean slate to type into, not something to select-and-overtype.
+  // Capture phase because focus doesn't bubble.
   document.getElementById("form-panel").addEventListener("focus", (e) => {
     const el = e.target;
     if (el.classList && el.classList.contains("mock-value")) {
-      el.select();
+      el.value = "";
       el.classList.remove("mock-value");
+      render();
     }
   }, true);
 
