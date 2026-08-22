@@ -24,7 +24,7 @@
 
   /* ── Toolbar ── */
 
-  .toolbar {
+  .build-topbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -36,12 +36,17 @@
     z-index: 10;
   }
 
-  .toolbar h1 {
-    font-size: 18px;
+  .back-to-jobs {
+    font-size: 14px;
     font-weight: 700;
+    color: var(--ink);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 6px 4px;
   }
 
-  .toolbar .actions button {
+  .build-topbar .actions button {
     font-size: 14px;
     font-weight: 600;
     padding: 9px 18px;
@@ -53,36 +58,31 @@
     margin-left: 8px;
   }
 
-  .toolbar .actions button.secondary {
+  .build-topbar .actions button.secondary {
     background: #fff;
     color: var(--accent);
   }
 
-  /* ── Layout ── */
+  /* ── Layout: the wizard form and the final preview are mutually exclusive
+     full-width states now, not a permanent side-by-side grid. ── */
 
-  .layout {
-    display: grid;
-    grid-template-columns: minmax(340px, 420px) 1fr;
-    gap: 24px;
-    padding: 24px;
-    max-width: 1400px;
-    margin: 0 auto;
-    align-items: start;
-  }
+  #build-view { min-height: 100dvh; }
 
-  @media (max-width: 900px) {
-    .layout { grid-template-columns: 1fr; }
-  }
-
-  /* ── Form panel ── */
+  /* ── Form panel: one wizard step visible at a time, Typeform-style ── */
 
   .form-panel {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 20px;
-    max-height: calc(100vh - 100px);
-    overflow-y: auto;
+    max-width: 560px;
+    margin: 48px auto;
+    padding: 0 24px;
+  }
+
+  .wizard-progress {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 16px;
   }
 
   .section {
@@ -170,9 +170,45 @@
     margin-top: 3px;
   }
 
+  /* Sample data pre-filling an untouched field -- a click/focus selects it
+     and this styling drops off (see the JS focus handler). */
+  .field input.mock-value, .field textarea.mock-value {
+    color: #8a8fa3;
+    font-style: italic;
+    background: #fafbfd;
+  }
+
+  .wizard-nav {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 32px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+
+  .wizard-nav button {
+    padding: 12px 22px;
+    font-size: 14px;
+    font-weight: 700;
+    border-radius: 6px;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+  }
+
+  .wizard-nav button.secondary {
+    background: #fff;
+    color: var(--accent);
+  }
+
   /* ── Preview panel (the actual resume) ── */
 
   .preview-wrap {
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 24px;
     display: flex;
     justify-content: center;
   }
@@ -184,6 +220,31 @@
     min-height: 1050px;
     box-shadow: 0 2px 12px rgba(0,0,0,0.12);
     padding: 52px 56px;
+  }
+
+  .final-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+  }
+
+  .final-actions button {
+    padding: 13px 24px;
+    font-size: 14px;
+    font-weight: 700;
+    border-radius: 6px;
+    border: 1px solid var(--accent);
+    cursor: pointer;
+  }
+
+  .final-actions button.secondary {
+    background: #fff;
+    color: var(--accent);
+  }
+
+  .final-actions button:not(.secondary) {
+    background: var(--accent);
+    color: #fff;
   }
 
   .r-name {
@@ -294,9 +355,8 @@
   /* ── Print ── */
 
   @media print {
-    .toolbar, .form-panel { display: none !important; }
-    .layout { display: block; padding: 0; }
-    .preview-wrap { display: block; }
+    .build-topbar, .form-panel, .final-actions { display: none !important; }
+    .preview-wrap { display: block; padding: 0; }
     .page {
       box-shadow: none;
       max-width: none;
@@ -308,79 +368,134 @@
     @page { margin: 18mm 16mm; }
   }
 
-  /* ── Tabs ── */
-
-  .tabs {
-    display: flex;
-    gap: 4px;
-  }
-
-  .tab-btn {
-    font-size: 14px;
-    font-weight: 600;
-    padding: 7px 16px;
-    border-radius: 6px;
-    border: none;
-    background: transparent;
-    color: var(--muted);
-    cursor: pointer;
-  }
-
-  .tab-btn.active {
-    background: var(--bg);
-    color: var(--ink);
-  }
-
-  @media print {
-    .tabs { display: none !important; }
-  }
-
   /* ── Jobs tab ── */
 
   .jobs-layout {
-    max-width: 900px;
+    max-width: 640px;
     margin: 0 auto;
-    padding: 24px;
-  }
-
-  .jobs-search {
+    padding: 0 24px 40px;
+    min-height: 100dvh;
     display: flex;
-    gap: 10px;
-    margin-bottom: 20px;
-    flex-wrap: wrap;
+    flex-direction: column;
   }
 
-  .jobs-search input {
+  /* ── Hero: centered wordmark + search pill, Google-homepage style.
+     Shrinks to a slim top bar once a search has run (see .searched below). ── */
+
+  .jobs-hero {
     flex: 1;
-    min-width: 160px;
-    padding: 10px 12px;
-    font-size: 14px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 18vh 0 32px;
+    transition: padding 0.25s ease;
   }
 
-  .jobs-search select {
-    padding: 10px 12px;
-    font-size: 14px;
+  #jobs-view.searched .jobs-hero {
+    flex: none;
+    padding: 24px 0 16px;
+  }
+
+  .jobs-wordmark {
+    font-size: 64px;
+    font-weight: 700;
+    letter-spacing: -2px;
+    margin-bottom: 28px;
+    transition: font-size 0.25s ease, margin 0.25s ease;
+  }
+
+  #jobs-view.searched .jobs-wordmark {
+    font-size: 26px;
+    margin-bottom: 16px;
+  }
+
+  .jobs-search-pill {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    max-width: 560px;
+    background: #fff;
+    border: 1px solid #dfe1e5;
+    border-radius: 100px;
+    box-shadow: 0 1px 6px rgba(32,33,36,0.15);
+    padding: 4px 8px 4px 18px;
+  }
+
+  .jobs-search-pill:hover, .jobs-search-pill:focus-within {
+    box-shadow: 0 2px 10px rgba(32,33,36,0.22);
+  }
+
+  .jobs-search-pill .pill-icon {
+    flex-shrink: 0;
+    opacity: 0.6;
+    font-size: 15px;
+  }
+
+  .jobs-search-pill input[type="text"] {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    outline: none;
+    padding: 12px 8px;
+    font-size: 15px;
+    background: transparent;
+    color: var(--ink);
+  }
+
+  .jobs-search-pill button {
+    flex-shrink: 0;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-size: 15px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .jobs-search-sub {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+    width: 100%;
+    max-width: 560px;
+    transition: opacity 0.2s ease, max-height 0.2s ease;
+  }
+
+  #jobs-view.searched .jobs-search-sub {
+    max-width: 420px;
+  }
+
+  .jobs-search-sub input, .jobs-search-sub select {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 12px;
+    font-size: 13px;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 100px;
     background: #fff;
     color: var(--ink);
   }
 
-  .jobs-search button {
-    padding: 10px 20px;
-    font-size: 14px;
-    font-weight: 700;
-    border: none;
-    border-radius: 6px;
-    background: var(--accent);
-    color: #fff;
-    cursor: pointer;
+  .jobs-search-sub select { flex: 0 0 auto; }
+
+  /* ── Results area: hidden until a search has actually run ── */
+
+  .jobs-status-row, #jobs-results, .jobs-loader {
+    display: none;
   }
 
+  #jobs-view.searched .jobs-status-row { display: flex; }
+  #jobs-view.searched #jobs-results { display: block; }
+  /* .jobs-loader visibility is still toggled in JS (flex/none) based on search progress */
+
   .jobs-status-row {
-    display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: 16px;
@@ -406,12 +521,12 @@
     white-space: nowrap;
   }
 
+  /* ── Job results: plain search-result-list style, not cards ── */
+
   .job-card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 16px 18px;
-    margin-bottom: 12px;
+    padding: 14px 0;
+    margin-bottom: 4px;
+    border-bottom: 1px solid #ebebeb;
   }
 
   .job-card-top {
@@ -422,20 +537,25 @@
   }
 
   .job-title {
-    font-size: 15px;
-    font-weight: 700;
+    display: block;
+    font-size: 17px;
+    font-weight: 500;
+    color: #1a0dab;
+    text-decoration: none;
   }
 
+  .job-title:hover { text-decoration: underline; }
+
   .job-company {
-    font-size: 13.5px;
-    color: #333;
+    font-size: 13px;
+    color: #006621;
     margin-top: 2px;
   }
 
   .job-meta {
     font-size: 12.5px;
     color: var(--muted);
-    margin-top: 6px;
+    margin-top: 4px;
   }
 
   .job-actions {
@@ -458,9 +578,9 @@
   }
 
   .job-desc {
-    font-size: 13px;
-    color: #444;
-    margin-top: 10px;
+    font-size: 13.5px;
+    color: #4d5156;
+    margin-top: 6px;
     line-height: 1.5;
     max-height: 4.5em;
     overflow: hidden;
@@ -492,34 +612,28 @@
 </head>
 <body>
 
-<div class="toolbar">
-  <h1>Resume Builder</h1>
-  <div class="tabs">
-    <button class="tab-btn active" id="tab-build">Build Resume</button>
-    <button class="tab-btn" id="tab-jobs">Find Jobs</button>
-  </div>
-  <div class="actions" id="build-actions">
-    <button class="secondary" id="clear-btn">Clear all</button>
-    <button id="print-btn">Print / Save as PDF</button>
-  </div>
-</div>
-
 <!-- ── JOBS VIEW ── -->
-<div class="jobs-layout" id="jobs-view" style="display:none">
-  <div class="jobs-search">
-    <input id="job-search-term" type="text" placeholder="Job title or keywords (e.g. Frontend Engineer)">
-    <input id="job-location" type="text" placeholder="City (e.g. Remote, Bengaluru, San Francisco)">
-    <select id="job-country">
-      <option value="usa">USA</option>
-      <option value="india">India</option>
-      <option value="uk">UK</option>
-      <option value="canada">Canada</option>
-      <option value="australia">Australia</option>
-      <option value="germany">Germany</option>
-      <option value="singapore">Singapore</option>
-      <option value="uae">UAE</option>
-    </select>
-    <button id="job-search-btn">Search</button>
+<div class="jobs-layout" id="jobs-view">
+  <div class="jobs-hero">
+    <div class="jobs-wordmark"><span style="color:#4285F4">J</span><span style="color:#EA4335">o</span><span style="color:#FBBC05">b</span><span style="color:#4285F4">F</span><span style="color:#34A853">i</span><span style="color:#EA4335">n</span><span style="color:#4285F4">d</span></div>
+    <div class="jobs-search-pill">
+      <span class="pill-icon">🔎</span>
+      <input id="job-search-term" type="text" placeholder="Job title or keywords">
+      <button id="job-search-btn" aria-label="Search">➜</button>
+    </div>
+    <div class="jobs-search-sub">
+      <input id="job-location" type="text" placeholder="City (e.g. Remote, Bengaluru)">
+      <select id="job-country">
+        <option value="usa">USA</option>
+        <option value="india">India</option>
+        <option value="uk">UK</option>
+        <option value="canada">Canada</option>
+        <option value="australia">Australia</option>
+        <option value="germany">Germany</option>
+        <option value="singapore">Singapore</option>
+        <option value="uae">UAE</option>
+      </select>
+    </div>
   </div>
   <div class="jobs-status-row">
     <div class="jobs-status" id="jobs-status">Search Indeed for open roles — results load here.</div>
@@ -532,12 +646,21 @@
   </div>
 </div>
 
-<div class="layout" id="build-view">
+<div id="build-view" style="display:none">
 
-  <!-- ── FORM ── -->
-  <div class="form-panel">
+  <div class="build-topbar">
+    <button class="back-to-jobs" id="back-to-jobs-btn">← Find Jobs</button>
+    <div class="actions">
+      <button class="secondary" id="clear-btn">Clear all</button>
+    </div>
+  </div>
 
-    <div class="section">
+  <!-- ── FORM (wizard: one section visible at a time) ── -->
+  <div class="form-panel" id="form-panel">
+
+    <div class="wizard-progress" id="wizard-progress"></div>
+
+    <div class="section" data-step="0">
       <h2>Personal Info</h2>
       <div class="field"><label>Full Name</label><input id="f-name" type="text" placeholder="Jordan Rivera"></div>
       <div class="field"><label>Headline / Target Role</label><input id="f-headline" type="text" placeholder="Frontend Engineer"></div>
@@ -551,26 +674,26 @@
       </div>
     </div>
 
-    <div class="section">
+    <div class="section" data-step="1">
       <h2>Summary</h2>
       <div class="field">
-        <textarea id="f-summary" rows="4" placeholder="2-3 sentence summary of your experience and what you're looking for."></textarea>
+        <textarea id="f-summary" rows="5" placeholder="2-3 sentence summary of your experience and what you're looking for."></textarea>
       </div>
     </div>
 
-    <div class="section">
+    <div class="section" data-step="2">
       <h2>Experience</h2>
       <div id="experience-list"></div>
       <button class="add-btn" id="add-experience">+ Add Experience</button>
     </div>
 
-    <div class="section">
+    <div class="section" data-step="3">
       <h2>Education</h2>
       <div id="education-list"></div>
       <button class="add-btn" id="add-education">+ Add Education</button>
     </div>
 
-    <div class="section">
+    <div class="section" data-step="4">
       <h2>Skills</h2>
       <div class="field">
         <input id="f-skills" type="text" placeholder="JavaScript, React, Node.js, SQL">
@@ -578,13 +701,21 @@
       </div>
     </div>
 
+    <div class="wizard-nav">
+      <button class="secondary" id="wizard-back-btn">← Back</button>
+      <button id="wizard-next-btn">Next →</button>
+    </div>
+
   </div>
 
-  <!-- ── PREVIEW ── -->
-  <div class="preview-wrap">
+  <!-- ── FINAL: full resume + download (shown after the last wizard step) ── -->
+  <div class="preview-wrap" id="preview-wrap" style="display:none">
     <div class="page" id="preview"></div>
+    <div class="final-actions">
+      <button class="secondary" id="edit-resume-btn">← Edit answers</button>
+      <button id="download-resume-btn">Download / Print PDF</button>
+    </div>
   </div>
-
 </div>
 
 <template id="experience-template">
@@ -646,7 +777,7 @@
     if (data) {
       Object.keys(data).forEach(cls => {
         const el = entry.querySelector("." + cls);
-        if (el) el.value = data[cls];
+        if (el) { el.value = data[cls]; el.classList.add("mock-value"); }
       });
     }
     document.getElementById(listId).appendChild(node);
@@ -660,15 +791,68 @@
   ["f-name", "f-headline", "f-email", "f-phone", "f-location", "f-link", "f-summary", "f-skills"]
     .forEach(id => document.getElementById(id).addEventListener("input", render));
 
-  $("#print-btn").addEventListener("click", () => window.print());
+  $("#download-resume-btn").addEventListener("click", () => window.print());
 
   $("#clear-btn").addEventListener("click", () => {
     if (!confirm("Clear all fields? This can't be undone.")) return;
-    document.querySelectorAll(".form-panel input, .form-panel textarea").forEach(el => el.value = "");
+    document.querySelectorAll(".form-panel input, .form-panel textarea").forEach(el => {
+      el.value = "";
+      el.classList.remove("mock-value");
+    });
     document.getElementById("experience-list").innerHTML = "";
     document.getElementById("education-list").innerHTML = "";
     render();
+    showWizardStep(0);
+    exitFinalPreview();
   });
+
+  // ── Wizard: one section of the form visible at a time, instead of the
+  // whole thing crammed on screen. Sample data pre-fills every field so
+  // nothing starts blank; the first click into a still-unedited field
+  // selects its text so typing immediately replaces it. ──
+
+  const wizardSections = () => Array.from(document.querySelectorAll("#form-panel > .section"));
+
+  function showWizardStep(i) {
+    const sections = wizardSections();
+    wizardStep = Math.max(0, Math.min(i, sections.length - 1));
+    sections.forEach((s, idx) => { s.style.display = idx === wizardStep ? "" : "none"; });
+    $("#wizard-progress").textContent = `Step ${wizardStep + 1} of ${sections.length}`;
+    $("#wizard-back-btn").style.visibility = wizardStep === 0 ? "hidden" : "visible";
+    $("#wizard-next-btn").textContent = wizardStep === sections.length - 1 ? "Finish → View Resume" : "Next →";
+  }
+  let wizardStep = 0;
+
+  $("#wizard-next-btn").addEventListener("click", () => {
+    const sections = wizardSections();
+    if (wizardStep < sections.length - 1) showWizardStep(wizardStep + 1);
+    else enterFinalPreview();
+  });
+  $("#wizard-back-btn").addEventListener("click", () => showWizardStep(wizardStep - 1));
+
+  function enterFinalPreview() {
+    $("#form-panel").style.display = "none";
+    $("#preview-wrap").style.display = "flex";
+  }
+  function exitFinalPreview() {
+    $("#preview-wrap").style.display = "none";
+    $("#form-panel").style.display = "";
+  }
+  $("#edit-resume-btn").addEventListener("click", () => {
+    exitFinalPreview();
+    showWizardStep(0);
+  });
+
+  // First focus on a sample-filled field selects its text so typing over it
+  // is one motion, not select-all-then-type. Capture phase because focus
+  // doesn't bubble.
+  document.getElementById("form-panel").addEventListener("focus", (e) => {
+    const el = e.target;
+    if (el.classList && el.classList.contains("mock-value")) {
+      el.select();
+      el.classList.remove("mock-value");
+    }
+  }, true);
 
   // ── Render preview from current form state ──
 
@@ -753,27 +937,26 @@
     preview.innerHTML = html;
   }
 
-  // ── Tabs ──
+  // ── View switching (Jobs is the homepage; Build Resume is reached from a
+  // job result's "Generate Resume" button, or the back link once there) ──
 
-  const JOBS_API = "http://localhost:8422";
+  const JOBS_API = "https://agent-jobs-e7ke.onrender.com";
   let currentSearchJobs = [];
   let currentSearchLabel = "jobs";
 
-  $("#tab-build").addEventListener("click", () => {
-    $("#tab-build").classList.add("active");
-    $("#tab-jobs").classList.remove("active");
+  function showBuildView() {
     $("#build-view").style.display = "";
-    $("#build-actions").style.display = "";
     $("#jobs-view").style.display = "none";
-  });
+    exitFinalPreview();
+    showWizardStep(0);
+  }
 
-  $("#tab-jobs").addEventListener("click", () => {
-    $("#tab-jobs").classList.add("active");
-    $("#tab-build").classList.remove("active");
+  function showJobsView() {
     $("#jobs-view").style.display = "";
     $("#build-view").style.display = "none";
-    $("#build-actions").style.display = "none";
-  });
+  }
+
+  $("#back-to-jobs-btn").addEventListener("click", showJobsView);
 
   // ── Jobs search ──
 
@@ -788,12 +971,14 @@
       <div class="job-card">
         <div class="job-card-top">
           <div>
-            <div class="job-title">${escapeHtml(j.title)}</div>
+            ${j.url
+              ? `<a class="job-title" href="${escapeAttr(j.url)}" target="_blank" rel="noopener">${escapeHtml(j.title)}</a>`
+              : `<div class="job-title">${escapeHtml(j.title)}</div>`}
             <div class="job-company">${escapeHtml(j.company)}${j.location ? " — " + escapeHtml(j.location) : ""}</div>
             <div class="job-meta">${[SITE_LABELS[j.site] || j.site, j.job_type, j.is_remote ? "Remote" : null, j.date_posted].filter(Boolean).map(escapeHtml).join(" · ")}</div>
           </div>
           <div class="job-actions">
-            <button onclick="useJobHeadline('${escapeAttr(j.title).replace(/'/g, "\\'")}')">Use as headline</button>
+            <button onclick="generateResumeForJob('${escapeAttr(j.title).replace(/'/g, "\\'")}', '${escapeAttr(j.company).replace(/'/g, "\\'")}')">Generate Resume</button>
             ${j.url ? `<a href="${escapeAttr(j.url)}" target="_blank" rel="noopener">Open</a>` : ""}
           </div>
         </div>
@@ -806,6 +991,9 @@
     const term = $("#job-search-term").value.trim();
     const location = $("#job-location").value.trim();
     const country = $("#job-country").value;
+
+    $("#jobs-view").classList.add("searched"); // shrinks the hero, reveals results area
+
     if (!term) {
       $("#jobs-status").textContent = "Enter a job title or keyword to search.";
       return;
@@ -890,12 +1078,19 @@
     }
   }
 
-  function useJobHeadline(title) {
+  function generateResumeForJob(title, company) {
     $("#f-headline").value = title;
+    // Don't clobber a summary the person already wrote -- only seed one if it's empty.
+    const summaryEl = $("#f-summary");
+    if (!summaryEl.value.trim()) {
+      summaryEl.value = company
+        ? `Aiming for the ${title} role at ${company}.`
+        : `Aiming for a ${title} role.`;
+    }
     render();
-    $("#tab-build").click();
+    showBuildView();
   }
-  window.useJobHeadline = useJobHeadline;
+  window.generateResumeForJob = generateResumeForJob;
 
   // ── CSV export ──
 
@@ -994,14 +1189,13 @@
   function fillSampleProfile() {
     const p = SAMPLE_PROFILES[Math.floor(Math.random() * SAMPLE_PROFILES.length)];
 
-    $("#f-name").value = p.name;
-    $("#f-headline").value = p.headline;
-    $("#f-email").value = p.email;
-    $("#f-phone").value = p.phone;
-    $("#f-location").value = p.location;
-    $("#f-link").value = p.link;
-    $("#f-summary").value = p.summary;
-    $("#f-skills").value = p.skills;
+    const fields = ["f-name", "f-headline", "f-email", "f-phone", "f-location", "f-link", "f-summary", "f-skills"];
+    const values = [p.name, p.headline, p.email, p.phone, p.location, p.link, p.summary, p.skills];
+    fields.forEach((id, i) => {
+      const el = $("#" + id);
+      el.value = values[i];
+      el.classList.add("mock-value");
+    });
 
     p.experience.forEach(data => addEntry("experience-list", "experience-template", data));
     p.education.forEach(data => addEntry("education-list", "education-template", data));
