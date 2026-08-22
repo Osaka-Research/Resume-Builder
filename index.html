@@ -308,6 +308,13 @@
     color: #fff;
   }
 
+  .jobs-click-notice {
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+    padding: 4px 12px 10px;
+  }
+
   .draft-notice {
     font-size: 11.5px;
     color: var(--muted);
@@ -747,6 +754,7 @@
     <div class="jobs-status" id="jobs-status">Search Indeed for open roles — results load here.</div>
     <button id="download-csv-btn" style="display:none">Download CSV</button>
   </div>
+  <div class="jobs-click-notice">Opening a listing or clicking "Generate Resume" logs which job and site, so we can see what's actually useful here.</div>
   <div id="jobs-results"></div>
   <div class="jobs-loader" id="jobs-loader" style="display:none">
     <div class="spinner"></div>
@@ -1333,6 +1341,7 @@
   const JOBS_API = "https://agent-jobs-e7ke.onrender.com";
   let currentSearchJobs = [];
   let currentSearchLabel = "jobs";
+  let lastSearchTerm = "";
 
   function showBuildView() {
     $("#build-view").style.display = "";
@@ -1357,25 +1366,59 @@
   const SITE_LABELS = { indeed: "Indeed", linkedin: "LinkedIn", glassdoor: "Glassdoor", zip_recruiter: "ZipRecruiter", google: "Google" };
 
   function jobCardHtml(j) {
+    const dTitle = escapeAttr(j.title);
+    const dCompany = escapeAttr(j.company);
+    const dSite = escapeAttr(j.site);
+    const dUrl = escapeAttr(j.url);
+    const dAttrs = `data-job-title="${dTitle}" data-job-company="${dCompany}" data-job-site="${dSite}" data-job-url="${dUrl}"`;
     return `
       <div class="job-card">
         <div class="job-card-top">
           <div>
             ${j.url
-              ? `<a class="job-title" href="${escapeAttr(j.url)}" target="_blank" rel="noopener">${escapeHtml(j.title)}</a>`
+              ? `<a class="job-title" data-click-action="open_title" ${dAttrs} href="${dUrl}" target="_blank" rel="noopener">${escapeHtml(j.title)}</a>`
               : `<div class="job-title">${escapeHtml(j.title)}</div>`}
             <div class="job-company">${escapeHtml(j.company)}${j.location ? " — " + escapeHtml(j.location) : ""}</div>
             <div class="job-meta">${[SITE_LABELS[j.site] || j.site, j.job_type, j.is_remote ? "Remote" : null, j.date_posted].filter(Boolean).map(escapeHtml).join(" · ")}</div>
           </div>
           <div class="job-actions">
-            <button onclick="generateResumeForJob('${escapeAttr(j.title).replace(/'/g, "\\'")}', '${escapeAttr(j.company).replace(/'/g, "\\'")}')">Generate Resume</button>
-            ${j.url ? `<a href="${escapeAttr(j.url)}" target="_blank" rel="noopener">Open</a>` : ""}
+            <button data-click-action="generate_resume" ${dAttrs}>Generate Resume</button>
+            ${j.url ? `<a data-click-action="open_link" ${dAttrs} href="${dUrl}" target="_blank" rel="noopener">Open</a>` : ""}
           </div>
         </div>
         ${j.description ? `<div class="job-desc">${escapeHtml(j.description)}</div>` : ""}
       </div>
     `;
   }
+
+  // Click tracking + Generate-Resume dispatch, delegated from the results
+  // container since cards are inserted as raw HTML strings as they stream in.
+  function logJobClick(action, job) {
+    fetch(JOBS_API + "/api/job-clicks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action, job_title: job.title, company: job.company,
+        site: job.site, url: job.url,
+        search_term: lastSearchTerm, session_id: SESSION_ID,
+      }),
+    }).catch(() => {});
+  }
+
+  $("#jobs-results").addEventListener("click", (e) => {
+    const el = e.target.closest("[data-click-action]");
+    if (!el) return;
+    const job = {
+      title: el.dataset.jobTitle || "",
+      company: el.dataset.jobCompany || "",
+      site: el.dataset.jobSite || "",
+      url: el.dataset.jobUrl || "",
+    };
+    logJobClick(el.dataset.clickAction, job);
+    if (el.dataset.clickAction === "generate_resume") {
+      generateResumeForJob(job.title, job.company);
+    }
+  });
 
   async function runJobSearch() {
     const term = $("#job-search-term").value.trim();
@@ -1396,6 +1439,7 @@
 
     currentSearchJobs = [];
     currentSearchLabel = term + (location ? " in " + location : "");
+    lastSearchTerm = term;
     const requestedSites = ["indeed", "linkedin", "glassdoor", "zip_recruiter", "google"];
     const siteCounts = Object.fromEntries(requestedSites.map(s => [s, null])); // null = still running
     let total = 0;
@@ -1480,7 +1524,6 @@
     render();
     showBuildView();
   }
-  window.generateResumeForJob = generateResumeForJob;
 
   // ── CSV export ──
 
