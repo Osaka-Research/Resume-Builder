@@ -308,6 +308,41 @@
     color: #fff;
   }
 
+  .submit-pool {
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px dashed var(--border);
+    max-width: 400px;
+    text-align: center;
+  }
+
+  .submit-pool-notice {
+    font-size: 11.5px;
+    color: var(--muted);
+    line-height: 1.5;
+    margin-bottom: 12px;
+  }
+
+  .submit-pool button {
+    padding: 10px 20px;
+    font-size: 13px;
+    font-weight: 700;
+    border-radius: 6px;
+    border: 1px solid var(--accent);
+    background: #fff;
+    color: var(--accent);
+    cursor: pointer;
+  }
+
+  .submit-status {
+    font-size: 12px;
+    font-weight: 600;
+    margin-top: 8px;
+  }
+
+  .submit-status.ok { color: #1a7f37; }
+  .submit-status.error { color: #b33; }
+
   .r-name {
     font-size: 30px;
     font-weight: 800;
@@ -416,7 +451,7 @@
   /* ── Print ── */
 
   @media print {
-    .build-topbar, .form-panel, .final-actions { display: none !important; }
+    .build-topbar, .form-panel, .final-actions, .submit-pool { display: none !important; }
     .preview-wrap { display: block; padding: 0; }
     .page {
       box-shadow: none;
@@ -787,6 +822,16 @@
       <button class="secondary" id="edit-resume-btn">← Edit answers</button>
       <button id="download-resume-btn">Download / Print PDF</button>
     </div>
+
+    <div class="submit-pool">
+      <div class="submit-pool-notice">
+        Everything above stays only on this device unless you choose otherwise.
+        Submitting sends a copy of this resume (name, contact info, experience,
+        education, skills) to our talent pool database for recruiters to review.
+      </div>
+      <button class="secondary" id="submit-pool-btn">Submit to talent pool</button>
+      <div class="submit-status" id="submit-status"></div>
+    </div>
   </div>
 </div>
 
@@ -920,6 +965,32 @@
   $("#edit-resume-btn").addEventListener("click", () => {
     exitFinalPreview();
     showWizardStep(0);
+  });
+
+  function setSubmitStatus(message, ok) {
+    const el = $("#submit-status");
+    el.textContent = message;
+    el.className = "submit-status " + (ok ? "ok" : "error");
+  }
+
+  $("#submit-pool-btn").addEventListener("click", async () => {
+    const data = loadResumeData();
+    if (!data || !(data.name || data.email)) {
+      setSubmitStatus("Add at least a name or email before submitting.", false);
+      return;
+    }
+    setSubmitStatus("Submitting…", true);
+    try {
+      const res = await fetch(JOBS_API + "/api/resumes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error("Server rejected the submission (HTTP " + res.status + ").");
+      setSubmitStatus("Submitted — thanks!", true);
+    } catch (err) {
+      setSubmitStatus("Couldn't submit: " + (err.message || "network error") + ".", false);
+    }
   });
 
   // First focus on a sample-filled field selects its text so typing over it
