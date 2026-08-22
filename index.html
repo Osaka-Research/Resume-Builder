@@ -63,6 +63,19 @@
     color: var(--accent);
   }
 
+  .build-topbar .actions .import-btn {
+    display: inline-block;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 9px 18px;
+    border-radius: 6px;
+    border: 1px solid var(--accent);
+    background: #fff;
+    color: var(--accent);
+    cursor: pointer;
+    margin-left: 8px;
+  }
+
   /* ── Layout: the wizard form and the final preview are mutually exclusive
      full-width states now, not a permanent side-by-side grid. ── */
 
@@ -699,6 +712,9 @@
   <div class="build-topbar">
     <button class="back-to-jobs" id="back-to-jobs-btn">← Find Jobs</button>
     <div class="actions">
+      <button class="secondary" id="export-btn">⬇ Save copy</button>
+      <label class="secondary import-btn" for="import-file-input">⬆ Load copy</label>
+      <input id="import-file-input" type="file" accept=".json" style="display:none">
       <button class="secondary" id="clear-btn">Clear all</button>
     </div>
   </div>
@@ -860,6 +876,13 @@
     render();
     showWizardStep(0);
     exitFinalPreview();
+  });
+
+  $("#export-btn").addEventListener("click", exportResumeData);
+  $("#import-file-input").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) importResumeData(file);
+    e.target.value = ""; // allow re-importing the same filename later
   });
 
   // ── Wizard: one section of the form visible at a time, instead of the
@@ -1077,6 +1100,93 @@
     }
 
     preview.innerHTML = html;
+
+    saveResumeData({
+      name, headline, email, phone, location, link, summary,
+      skills: $("#f-skills").value,
+      experience, education,
+    });
+  }
+
+  // ── Persistence: everything typed into the wizard auto-saves to this
+  // browser's localStorage on every change, and survives reload/reopen.
+  // Export/Import give a copy you fully control (a real file, not tied to
+  // this browser/device). ──
+
+  const RESUME_DATA_KEY = "resume_builder_data_v1";
+
+  function saveResumeData(data) {
+    localStorage.setItem(RESUME_DATA_KEY, JSON.stringify(data));
+  }
+
+  function loadResumeData() {
+    const raw = localStorage.getItem(RESUME_DATA_KEY);
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch { return null; }
+  }
+
+  function hasSavedContent(data) {
+    if (!data) return false;
+    return Boolean(
+      data.name || data.headline || data.summary ||
+      (data.experience && data.experience.length) ||
+      (data.education && data.education.length)
+    );
+  }
+
+  function restoreResumeData(data) {
+    $("#f-name").value = data.name || "";
+    $("#f-headline").value = data.headline || "";
+    $("#f-email").value = data.email || "";
+    $("#f-phone").value = data.phone || "";
+    $("#f-location").value = data.location || "";
+    $("#f-link").value = data.link || "";
+    $("#f-summary").value = data.summary || "";
+    $("#f-skills").value = data.skills || "";
+
+    (data.experience || []).forEach(e => addEntry("experience-list", "experience-template", {
+      "e-title": e.title, "e-company": e.company, "e-location": e.location,
+      "e-start": e.start, "e-end": e.end, "e-bullets": (e.bullets || []).join("\n"),
+    }));
+    (data.education || []).forEach(e => addEntry("education-list", "education-template", {
+      "d-degree": e.degree, "d-school": e.school, "d-location": e.location,
+      "d-start": e.start, "d-end": e.end,
+    }));
+  }
+
+  function exportResumeData() {
+    const data = loadResumeData() || {};
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "resume-data.json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function importResumeData(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        document.querySelectorAll(".form-panel input, .form-panel textarea").forEach(el => {
+          el.value = "";
+          el.classList.remove("mock-value");
+        });
+        document.getElementById("experience-list").innerHTML = "";
+        document.getElementById("education-list").innerHTML = "";
+        restoreResumeData(data);
+        render();
+        showWizardStep(0);
+        setUploadStatus("Loaded resume-data.json.", true);
+      } catch {
+        setUploadStatus("That file isn't a valid resume-data.json export.", false);
+      }
+    };
+    reader.readAsText(file);
   }
 
   // ── View switching (Jobs is the homepage; Build Resume is reached from a
@@ -1343,7 +1453,12 @@
     p.education.forEach(data => addEntry("education-list", "education-template", data));
   }
 
-  fillSampleProfile();
+  const savedOnLoad = loadResumeData();
+  if (hasSavedContent(savedOnLoad)) {
+    restoreResumeData(savedOnLoad);
+  } else {
+    fillSampleProfile();
+  }
   render();
 </script>
 
