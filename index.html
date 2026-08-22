@@ -264,6 +264,13 @@
     color: var(--accent);
   }
 
+  .wizard-nav button:disabled {
+    background: #ddd;
+    border-color: #ddd;
+    color: #888;
+    cursor: not-allowed;
+  }
+
   /* ── Preview panel (the actual resume) ── */
 
   .preview-wrap {
@@ -967,6 +974,20 @@
 
   const wizardSections = () => Array.from(document.querySelectorAll("#form-panel > .section"));
 
+  // Step 1 (Personal Info) has to be filled for real before moving on --
+  // otherwise a resume gets built around whatever sample name/email was
+  // still sitting there unedited.
+  const STEP1_FIELD_IDS = ["f-name", "f-headline", "f-email", "f-phone", "f-location", "f-link"];
+  function step1Complete() {
+    return STEP1_FIELD_IDS.every(id => {
+      const el = $("#" + id);
+      return !el.classList.contains("mock-value") && el.value.trim();
+    });
+  }
+  function updateNextButtonState() {
+    $("#wizard-next-btn").disabled = wizardStep === 0 && !step1Complete();
+  }
+
   function showWizardStep(i) {
     const sections = wizardSections();
     wizardStep = Math.max(0, Math.min(i, sections.length - 1));
@@ -974,10 +995,12 @@
     $("#wizard-progress").textContent = `Step ${wizardStep + 1} of ${sections.length}`;
     $("#wizard-back-btn").style.visibility = wizardStep === 0 ? "hidden" : "visible";
     $("#wizard-next-btn").textContent = wizardStep === sections.length - 1 ? "Finish → View Resume" : "Next →";
+    updateNextButtonState();
   }
   let wizardStep = 0;
 
   $("#wizard-next-btn").addEventListener("click", () => {
+    if ($("#wizard-next-btn").disabled) return;
     const sections = wizardSections();
     if (wizardStep < sections.length - 1) showWizardStep(wizardStep + 1);
     else enterFinalPreview();
@@ -1244,6 +1267,7 @@
     };
     saveResumeData(dataOut);
     if (!suppressDraftSave) scheduleDraftSave(dataOut);
+    updateNextButtonState();
   }
 
   // ── Persistence: everything typed into the wizard auto-saves to this
