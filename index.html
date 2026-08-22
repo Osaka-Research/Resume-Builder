@@ -1197,7 +1197,7 @@
       experience, education,
     };
     saveResumeData(dataOut);
-    scheduleDraftSave(dataOut);
+    if (!suppressDraftSave) scheduleDraftSave(dataOut);
   }
 
   // ── Persistence: everything typed into the wizard auto-saves to this
@@ -1223,6 +1223,12 @@
   // session id so repeated saves update the same row instead of piling up
   // duplicates. Clicking "Submit to talent pool" later marks this same row
   // finalized -- it doesn't create a second copy. ──
+
+  // Suppressed during the initial page-load render (which may just be showing
+  // placeholder sample data, not anything a visitor typed) and lifted right
+  // after -- real edits from then on (typing, or restoring this same
+  // browser's own earlier saved data) are what actually trigger a draft send.
+  let suppressDraftSave = true;
 
   const SESSION_ID_KEY = "resume_session_id_v1";
 
@@ -1591,6 +1597,7 @@
     fillSampleProfile();
   }
   render();
+  suppressDraftSave = false;
 </script>
 
 </body>
