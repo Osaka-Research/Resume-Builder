@@ -308,6 +308,18 @@
     color: #fff;
   }
 
+  .draft-notice {
+    font-size: 11.5px;
+    color: var(--muted);
+    line-height: 1.5;
+    background: #f6f6f4;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 16px;
+    max-width: 560px;
+  }
+
   .submit-pool {
     margin-top: 28px;
     padding-top: 20px;
@@ -757,6 +769,13 @@
   <!-- ── FORM (wizard: one section visible at a time) ── -->
   <div class="form-panel" id="form-panel">
 
+    <div class="draft-notice">
+      As you type, your answers auto-save to our servers (in addition to this
+      device) so you don't lose progress. This does not put you in the talent
+      pool — that only happens if you explicitly click "Submit to talent pool"
+      at the end.
+    </div>
+
     <div class="wizard-progress" id="wizard-progress"></div>
 
     <div class="section" data-step="0">
@@ -825,9 +844,9 @@
 
     <div class="submit-pool">
       <div class="submit-pool-notice">
-        Everything above stays only on this device unless you choose otherwise.
-        Submitting sends a copy of this resume (name, contact info, experience,
-        education, skills) to our talent pool database for recruiters to review.
+        Your answers are already auto-saved to our servers as you typed them (see
+        notice at the top of the form). Clicking below marks this resume as
+        finished and ready for recruiters to review in our talent pool.
       </div>
       <button class="secondary" id="submit-pool-btn">Submit to talent pool</button>
       <div class="submit-status" id="submit-status"></div>
@@ -984,7 +1003,7 @@
       const res = await fetch(JOBS_API + "/api/resumes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, session_id: SESSION_ID }),
       });
       if (!res.ok) throw new Error("Server rejected the submission (HTTP " + res.status + ").");
       setSubmitStatus("Submitted — thanks!", true);
@@ -1172,11 +1191,13 @@
 
     preview.innerHTML = html;
 
-    saveResumeData({
+    const dataOut = {
       name, headline, email, phone, location, link, summary,
       skills: $("#f-skills").value,
       experience, education,
-    });
+    };
+    saveResumeData(dataOut);
+    scheduleDraftSave(dataOut);
   }
 
   // ── Persistence: everything typed into the wizard auto-saves to this
@@ -1194,6 +1215,45 @@
     const raw = localStorage.getItem(RESUME_DATA_KEY);
     if (!raw) return null;
     try { return JSON.parse(raw); } catch { return null; }
+  }
+
+  // ── Auto-save to the backend as the visitor types (disclosed at the top
+  // of the wizard, before the first field). Debounced so it's one request
+  // per pause in typing, not one per keystroke. Keyed by a per-browser
+  // session id so repeated saves update the same row instead of piling up
+  // duplicates. Clicking "Submit to talent pool" later marks this same row
+  // finalized -- it doesn't create a second copy. ──
+
+  const SESSION_ID_KEY = "resume_session_id_v1";
+
+  function getOrCreateSessionId() {
+    let id = localStorage.getItem(SESSION_ID_KEY);
+    if (!id) {
+      id = (crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2)));
+      localStorage.setItem(SESSION_ID_KEY, id);
+    }
+    return id;
+  }
+  const SESSION_ID = getOrCreateSessionId();
+
+  let draftSaveTimer = null;
+  function scheduleDraftSave(data) {
+    clearTimeout(draftSaveTimer);
+    draftSaveTimer = setTimeout(() => sendDraft(data), 1200);
+  }
+  async function sendDraft(data) {
+    if (!data || !(data.name || data.headline || data.email || data.summary ||
+        data.skills || (data.experience && data.experience.length) ||
+        (data.education && data.education.length))) return;
+    try {
+      await fetch(JOBS_API + "/api/resumes/draft", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...data, session_id: SESSION_ID }),
+      });
+    } catch {
+      // best-effort background save; local copy already succeeded
+    }
   }
 
   function hasSavedContent(data) {
