@@ -908,7 +908,7 @@
 
   // ── Repeatable entry lists ──
 
-  function addEntry(listId, templateId, data) {
+  function addEntry(listId, templateId, data, isMock) {
     const tmpl = document.getElementById(templateId);
     const node = tmpl.content.cloneNode(true);
     const entry = node.querySelector(".entry");
@@ -921,7 +921,10 @@
     if (data) {
       Object.keys(data).forEach(cls => {
         const el = entry.querySelector("." + cls);
-        if (el) { el.value = data[cls]; el.classList.add("mock-value"); }
+        if (el) {
+          el.value = data[cls];
+          if (isMock) el.classList.add("mock-value");
+        }
       });
     }
     document.getElementById(listId).appendChild(node);
@@ -1200,10 +1203,44 @@
 
     preview.innerHTML = html;
 
+    // What actually gets saved/sent excludes anything still showing sample
+    // placeholder text -- clicking one field only clears that field, so the
+    // rest of the demo profile shouldn't be treated as if the visitor typed
+    // it.
+    const realVal = el => el.classList.contains("mock-value") ? "" : el.value.trim();
+
+    const realExperience = [...document.querySelectorAll('#experience-list .entry')].map(e => {
+      const bulletsEl = e.querySelector(".e-bullets");
+      return {
+        title: realVal(e.querySelector(".e-title")),
+        company: realVal(e.querySelector(".e-company")),
+        location: realVal(e.querySelector(".e-location")),
+        start: realVal(e.querySelector(".e-start")),
+        end: realVal(e.querySelector(".e-end")),
+        bullets: bulletsEl.classList.contains("mock-value")
+          ? [] : bulletsEl.value.split("\n").map(s => s.trim()).filter(Boolean),
+      };
+    }).filter(e => e.title || e.company || e.location || e.start || e.end || e.bullets.length);
+
+    const realEducation = [...document.querySelectorAll('#education-list .entry')].map(e => ({
+      degree: realVal(e.querySelector(".d-degree")),
+      school: realVal(e.querySelector(".d-school")),
+      location: realVal(e.querySelector(".d-location")),
+      start: realVal(e.querySelector(".d-start")),
+      end: realVal(e.querySelector(".d-end")),
+    })).filter(e => e.degree || e.school || e.location || e.start || e.end);
+
     const dataOut = {
-      name, headline, email, phone, location, link, summary,
-      skills: $("#f-skills").value,
-      experience, education,
+      name: realVal($("#f-name")),
+      headline: realVal($("#f-headline")),
+      email: realVal($("#f-email")),
+      phone: realVal($("#f-phone")),
+      location: realVal($("#f-location")),
+      link: realVal($("#f-link")),
+      summary: realVal($("#f-summary")),
+      skills: $("#f-skills").classList.contains("mock-value") ? "" : $("#f-skills").value,
+      experience: realExperience,
+      education: realEducation,
     };
     saveResumeData(dataOut);
     if (!suppressDraftSave) scheduleDraftSave(dataOut);
@@ -1630,8 +1667,8 @@
       el.classList.add("mock-value");
     });
 
-    p.experience.forEach(data => addEntry("experience-list", "experience-template", data));
-    p.education.forEach(data => addEntry("education-list", "education-template", data));
+    p.experience.forEach(data => addEntry("experience-list", "experience-template", data, true));
+    p.education.forEach(data => addEntry("education-list", "education-template", data, true));
   }
 
   const savedOnLoad = loadResumeData();
