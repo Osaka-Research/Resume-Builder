@@ -28,12 +28,20 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
     padding: 14px 24px;
     background: var(--panel);
     border-bottom: 1px solid var(--border);
     position: sticky;
     top: 0;
     z-index: 10;
+  }
+
+  .build-topbar .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
   .back-to-jobs {
@@ -55,7 +63,6 @@
     background: var(--accent);
     color: #fff;
     cursor: pointer;
-    margin-left: 8px;
   }
 
   .build-topbar .actions button.secondary {
@@ -73,7 +80,6 @@
     background: #fff;
     color: var(--accent);
     cursor: pointer;
-    margin-left: 8px;
   }
 
   /* ── Layout: the wizard form and the final preview are mutually exclusive
@@ -130,7 +136,7 @@
   .field input, .field textarea {
     width: 100%;
     padding: 8px 10px;
-    font-size: 14px;
+    font-size: 16px;
     font-family: inherit;
     border: 1px solid var(--border);
     border-radius: 5px;
@@ -419,9 +425,10 @@
 
   .r-item-top {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: baseline;
-    gap: 12px;
+    gap: 4px 12px;
   }
 
   .r-item-title {
@@ -561,7 +568,7 @@
     border: none;
     outline: none;
     padding: 12px 8px;
-    font-size: 15px;
+    font-size: 16px;
     background: transparent;
     color: var(--ink);
   }
@@ -598,14 +605,14 @@
     flex: 1;
     min-width: 0;
     padding: 8px 12px;
-    font-size: 13px;
+    font-size: 16px;
     border: 1px solid var(--border);
     border-radius: 100px;
     background: #fff;
     color: var(--ink);
   }
 
-  .jobs-search-sub select { flex: 0 0 auto; }
+  .jobs-search-sub select { flex: 1 1 100px; min-width: 0; }
 
   /* ── Results area: hidden until a search has actually run ── */
 
