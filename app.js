@@ -538,6 +538,7 @@
           </div>
           <div class="job-actions">
             <button data-click-action="generate_resume" ${dAttrs}>Generate Resume</button>
+            <button data-click-action="share_job" ${dAttrs}>Share</button>
             ${j.url ? `<a data-click-action="open_link" ${dAttrs} href="${dUrl}" target="_blank" rel="noopener">Open</a>` : ""}
           </div>
         </div>
@@ -560,6 +561,28 @@
     }).catch(() => {});
   }
 
+  async function shareJob(job, buttonEl) {
+    const shareText = `${job.title}${job.company ? " at " + job.company : ""}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: shareText, text: shareText, url: job.url || undefined });
+        return;
+      } catch (err) {
+        if (err && err.name === "AbortError") return; // user cancelled, no fallback needed
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(job.url || shareText);
+      if (buttonEl) {
+        const original = buttonEl.textContent;
+        buttonEl.textContent = "Copied!";
+        setTimeout(() => { buttonEl.textContent = original; }, 1500);
+      }
+    } catch (err) {
+      // clipboard unavailable (insecure context, permissions) -- nothing more we can do
+    }
+  }
+
   $("#jobs-results").addEventListener("click", (e) => {
     const el = e.target.closest("[data-click-action]");
     if (!el) return;
@@ -572,6 +595,8 @@
     logJobClick(el.dataset.clickAction, job);
     if (el.dataset.clickAction === "generate_resume") {
       generateResumeForJob(job.title, job.company);
+    } else if (el.dataset.clickAction === "share_job") {
+      shareJob(job, el);
     }
   });
 
