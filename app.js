@@ -640,9 +640,57 @@
     return null;
   }
 
+  const JOB_DICT_SET = new Set(JOB_DICTIONARY);
+
+  function levenshtein(a, b) {
+    const m = a.length, n = b.length;
+    const d = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
+    for (let j = 0; j <= n; j++) d[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        d[i][j] = a[i - 1] === b[j - 1]
+          ? d[i - 1][j - 1]
+          : 1 + Math.min(d[i - 1][j], d[i][j - 1], d[i - 1][j - 1]);
+      }
+    }
+    return d[m][n];
+  }
+
+  function autoCorrectTerm(text) {
+    let changed = false;
+    const corrected = text.split(/(\s+)/).map(word => {
+      const lower = word.toLowerCase();
+      if (!/^[a-z]{4,}$/.test(lower) || JOB_DICT_SET.has(lower)) return word;
+      const maxDist = lower.length >= 7 ? 2 : 1;
+      let best = null, bestDist = Infinity, tie = false;
+      for (const dictWord of JOB_DICTIONARY) {
+        if (Math.abs(dictWord.length - lower.length) > maxDist) continue;
+        const dist = levenshtein(lower, dictWord);
+        if (dist < bestDist) { best = dictWord; bestDist = dist; tie = false; }
+        else if (dist === bestDist) tie = true;
+      }
+      if (best && bestDist <= maxDist && bestDist > 0 && !tie) {
+        changed = true;
+        // preserve the original capitalization style
+        if (word[0] === word[0].toUpperCase()) return best[0].toUpperCase() + best.slice(1);
+        return best;
+      }
+      return word;
+    }).join("");
+    return { text: corrected, changed };
+  }
+
   async function runJobSearch() {
-    const term = $("#job-search-term").value.trim();
+    let term = $("#job-search-term").value.trim();
     const location = $("#job-location").value.trim();
+
+    const correction = autoCorrectTerm(term);
+    let correctedFrom = null;
+    if (correction.changed) {
+      correctedFrom = term;
+      term = correction.text;
+      $("#job-search-term").value = term;
+    }
 
     const detected = location ? detectCountryFromLocation(location) : null;
     if (detected && detected !== getCountryValue()) {
@@ -684,7 +732,8 @@
         .join(", ");
       const stillWaiting = requestedSites.some(s => siteCounts[s] === null);
       const note = stillWaiting ? " LinkedIn is usually the slowest — can take up to a minute, keep this open." : "";
-      $("#jobs-status").textContent = `${total} result${total === 1 ? "" : "s"} so far for "${term}"${location ? " in " + location : ""}. (${breakdown})${note}`;
+      const correctionNote = correctedFrom ? ` (auto-corrected from "${correctedFrom}")` : "";
+      $("#jobs-status").textContent = `${total} result${total === 1 ? "" : "s"} so far for "${term}"${location ? " in " + location : ""}.${correctionNote} (${breakdown})${note}`;
       $("#jobs-loader").style.display = stillWaiting ? "flex" : "none";
       $("#download-csv-btn").style.display = (!stillWaiting && currentSearchJobs.length) ? "" : "none";
     };
@@ -796,8 +845,89 @@
   $("#download-csv-btn").addEventListener("click", downloadCsv);
 
   $("#job-search-btn").addEventListener("click", runJobSearch);
-  $("#job-search-term").addEventListener("keydown", e => { if (e.key === "Enter") runJobSearch(); });
   $("#job-location").addEventListener("keydown", e => { if (e.key === "Enter") runJobSearch(); });
+
+  // ── Search-term autocomplete (Google-style, suggests against the same
+  // job-search dictionary the auto-correct above uses) ──
+  const termInput = $("#job-search-term");
+  const suggestList = $("#job-term-suggestions");
+  let activeSuggestionIndex = -1;
+
+  function currentWordBounds() {
+    const value = termInput.value;
+    const caret = termInput.selectionStart;
+    const start = value.slice(0, caret).search(/\S*$/);
+    const endMatch = value.slice(caret).match(/^\S*/);
+    const end = caret + (endMatch ? endMatch[0].length : 0);
+    return { start, end, word: value.slice(start, end) };
+  }
+
+  function renderSuggestions(matches, prefix) {
+    if (!matches.length) { hideSuggestions(); return; }
+    suggestList.innerHTML = matches.map((m, i) => `
+      <li role="option" data-index="${i}" data-word="${escapeHtml(m)}">
+        <span class="ac-icon">🔍</span><span><span class="ac-match">${escapeHtml(m.slice(0, prefix.length))}</span>${escapeHtml(m.slice(prefix.length))}</span>
+      </li>`).join("");
+    suggestList.hidden = false;
+    activeSuggestionIndex = -1;
+  }
+  function hideSuggestions() {
+    suggestList.hidden = true;
+    suggestList.innerHTML = "";
+    activeSuggestionIndex = -1;
+  }
+  function applySuggestion(word) {
+    const { start, end } = currentWordBounds();
+    const value = termInput.value;
+    const needsSpace = end < value.length && !/\s/.test(value[end]);
+    termInput.value = value.slice(0, start) + word + (needsSpace ? " " : "") + value.slice(end);
+    const caret = start + word.length + (needsSpace ? 1 : 0);
+    termInput.setSelectionRange(caret, caret);
+    hideSuggestions();
+  }
+
+  termInput.addEventListener("input", () => {
+    const { word } = currentWordBounds();
+    const prefix = word.toLowerCase();
+    if (prefix.length < 2) { hideSuggestions(); return; }
+    const matches = JOB_DICTIONARY.filter(w => w.startsWith(prefix) && w !== prefix).slice(0, 6);
+    renderSuggestions(matches, prefix);
+  });
+
+  termInput.addEventListener("keydown", (e) => {
+    const items = suggestList.querySelectorAll("li");
+    if (!suggestList.hidden && items.length) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        activeSuggestionIndex = (activeSuggestionIndex + 1) % items.length;
+        items.forEach((li, i) => li.classList.toggle("active", i === activeSuggestionIndex));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        activeSuggestionIndex = (activeSuggestionIndex - 1 + items.length) % items.length;
+        items.forEach((li, i) => li.classList.toggle("active", i === activeSuggestionIndex));
+        return;
+      }
+      if (e.key === "Enter" && activeSuggestionIndex >= 0) {
+        e.preventDefault();
+        applySuggestion(items[activeSuggestionIndex].dataset.word);
+        return;
+      }
+      if (e.key === "Escape") { hideSuggestions(); return; }
+    }
+    if (e.key === "Enter") { hideSuggestions(); runJobSearch(); }
+  });
+
+  suggestList.addEventListener("click", (e) => {
+    const li = e.target.closest("li");
+    if (!li) return;
+    applySuggestion(li.dataset.word);
+    termInput.focus();
+  });
+  document.addEventListener("click", (e) => {
+    if (!termInput.contains(e.target) && !suggestList.contains(e.target)) hideSuggestions();
+  });
 
   // ── Sample profiles — one picked at random on every load, so a first-time
   // visitor sees a filled-out resume instead of a blank form. ──

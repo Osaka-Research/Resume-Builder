@@ -588,6 +588,38 @@
     justify-content: center;
   }
 
+  .search-autocomplete-wrap { position: relative; width: 100%; max-width: 560px; }
+
+  .autocomplete-list {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 12px;
+    right: 12px;
+    z-index: 20;
+    margin: 0;
+    padding: 6px;
+    list-style: none;
+    background: #fff;
+    border: 1px solid #dfe1e5;
+    border-radius: 14px;
+    box-shadow: 0 4px 18px rgba(32, 33, 36, 0.18);
+    text-align: left;
+  }
+  .autocomplete-list li {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 15px;
+    cursor: pointer;
+    color: var(--ink);
+  }
+  .autocomplete-list li .ac-icon { opacity: 0.45; font-size: 13px; }
+  .autocomplete-list li:hover,
+  .autocomplete-list li.active { background: #eef2fa; }
+  .autocomplete-list li .ac-match { font-weight: 700; }
+
   .jobs-search-sub {
     display: flex;
     gap: 8px;
@@ -793,10 +825,13 @@
 <div class="jobs-layout" id="jobs-view">
   <div class="jobs-hero">
     <div class="jobs-wordmark"><span style="color:#4285F4">J</span><span style="color:#EA4335">o</span><span style="color:#FBBC05">b</span><span style="color:#4285F4">F</span><span style="color:#34A853">i</span><span style="color:#EA4335">n</span><span style="color:#4285F4">d</span></div>
-    <div class="jobs-search-pill">
-      <span class="pill-icon">🔎</span>
-      <input id="job-search-term" type="text" placeholder="Job title or keywords">
-      <button id="job-search-btn" aria-label="Search">➜</button>
+    <div class="search-autocomplete-wrap">
+      <div class="jobs-search-pill">
+        <span class="pill-icon">🔎</span>
+        <input id="job-search-term" type="text" placeholder="Job title or keywords" autocomplete="off">
+        <button id="job-search-btn" aria-label="Search">➜</button>
+      </div>
+      <ul class="autocomplete-list" id="job-term-suggestions" role="listbox" hidden></ul>
     </div>
     <div class="jobs-search-sub">
       <input id="job-location" type="text" placeholder="City (e.g. Remote, Bengaluru)">
@@ -967,26 +1002,30 @@
 <!-- Bump ?v= whenever app.js changes so browsers don't reuse a cached copy
      on a fresh page load. The update-check script below (for tabs already
      open when a deploy happens) is separate and doesn't rely on this. -->
-<script src="app.js?v=ddd5d1cd"></script>
+<script src="dictionary.js?v=35c2a6a0"></script>
+<script src="app.js?v=19485718"></script>
 <script>
   // ── Update checker ──────────────────────────────────────────────────
   // A silent auto-reload here could wipe someone's half-filled resume
   // form, so this only ever *offers* a refresh via a small banner -- it
-  // never reloads on its own. Compares app.js's live content hash against
-  // the one this page loaded with; only fires while the tab is visible.
+  // never reloads on its own. Compares app.js/dictionary.js's live content
+  // hash against what this page loaded with; only fires while visible.
   function djb2(str) {
     let h = 5381;
     for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) >>> 0;
     return h.toString(16);
   }
-  let loadedHash = null;
+  const WATCHED_FILES = ["app.js", "dictionary.js"];
+  let loadedHashes = null;
   async function checkForUpdate() {
     try {
-      const res = await fetch("app.js", { cache: "no-store" });
-      const text = await res.text();
-      const hash = djb2(text);
-      if (loadedHash === null) { loadedHash = hash; return; }
-      if (hash !== loadedHash) showUpdateBanner();
+      const hashes = {};
+      for (const file of WATCHED_FILES) {
+        const res = await fetch(file, { cache: "no-store" });
+        hashes[file] = djb2(await res.text());
+      }
+      if (loadedHashes === null) { loadedHashes = hashes; return; }
+      if (WATCHED_FILES.some(f => hashes[f] !== loadedHashes[f])) showUpdateBanner();
     } catch (e) { /* offline or blocked -- just skip this round */ }
   }
   function showUpdateBanner() {
