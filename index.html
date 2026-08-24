@@ -1488,10 +1488,47 @@
     }
   });
 
+  // Indeed is scoped entirely by the country dropdown (country_indeed), not by
+  // the typed location -- if someone types an India city but the dropdown is
+  // still sitting on its default "USA", Indeed silently searches the US site
+  // and returns 0 results with no indication why. Auto-correct the dropdown
+  // from whatever country name/alias shows up in the typed text.
+  const COUNTRY_ALIASES = {
+    usa: ["usa", "united states", " us ", "us,"],
+    india: ["india"],
+    uk: ["uk", "united kingdom", "england", "britain", "scotland", "wales"],
+    canada: ["canada"],
+    australia: ["australia"],
+    germany: ["germany"],
+    singapore: ["singapore"],
+    uae: ["uae", "united arab emirates", "dubai", "abu dhabi"],
+  };
+  function detectCountryFromLocation(locationText) {
+    const hay = ` ${locationText.toLowerCase()} `;
+    for (const [code, aliases] of Object.entries(COUNTRY_ALIASES)) {
+      if (aliases.some(a => hay.includes(a))) return code;
+    }
+    return null;
+  }
+
   async function runJobSearch() {
     const term = $("#job-search-term").value.trim();
     const location = $("#job-location").value.trim();
+
+    const detected = location ? detectCountryFromLocation(location) : null;
+    if (detected && detected !== $("#job-country").value) {
+      $("#job-country").value = detected;
+    }
     const country = $("#job-country").value;
+    const countryLabel = $("#job-country").selectedOptions[0].text;
+    // LinkedIn (and Glassdoor/ZipRecruiter) only ever see the raw `location`
+    // string below -- country_indeed only scopes Indeed's own domain. Without
+    // the country folded in here, a bare city name is ambiguous worldwide and
+    // LinkedIn's free-text geo resolver guesses, often landing in the wrong
+    // country/region entirely.
+    const locationForApi = location && !location.toLowerCase().includes(countryLabel.toLowerCase())
+      ? `${location}, ${countryLabel}`
+      : location;
 
     $("#jobs-view").classList.add("searched"); // shrinks the hero, reveals results area
 
@@ -1530,7 +1567,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           search_term: term,
-          location: location,
+          location: locationForApi,
           sites: requestedSites,
           results_wanted: 200,
           timeout_seconds: 280,
