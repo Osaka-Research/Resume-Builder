@@ -3,4 +3,5 @@
 __pycache__/
 *.pyc
 searches.db
+data/
 test_pydoll.py

@@ -13,7 +13,9 @@ Endpoints:
 Env:
   TELEGRAM_BOT_TOKEN  — bot token for sending xlsx
   TELEGRAM_CHAT_ID    — chat id to send to
-  SQLITE_PATH         — db file path (default /data/searches.db)
+  SQLITE_PATH         — db file path (default ./data/searches.db, next to this
+                         file -- override for a mounted volume, e.g. Render's
+                         /data or an AWS EBS/EFS mount path)
 """
 from __future__ import annotations
 
@@ -34,7 +36,7 @@ log = logging.getLogger("agent-jobs.admin")
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
-DB_PATH = Path(os.getenv("SQLITE_PATH", "/data/searches.db"))
+DB_PATH = Path(os.getenv("SQLITE_PATH", str(Path(__file__).parent / "data" / "searches.db")))
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
