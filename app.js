@@ -707,9 +707,13 @@
     return { text: corrected, changed };
   }
 
+  const HOURS_LABELS = { 24: "the last 24 hrs", 72: "the last 3 days", 168: "the last week", 336: "the last 2 weeks", 720: "the last month" };
+
   async function runJobSearch() {
     let term = $("#job-search-term").value.trim();
     const location = $("#job-location").value.trim();
+    const hoursOld = parseInt($("#job-hours").value, 10) || 24;
+    const hoursLabel = HOURS_LABELS[hoursOld] || `the last ${hoursOld} hrs`;
 
     const correction = autoCorrectTerm(term);
     let correctedFrom = null;
@@ -741,7 +745,7 @@
       return;
     }
 
-    $("#jobs-status").textContent = "Searching jobs posted in the last 24 hrs…";
+    $("#jobs-status").textContent = `Searching jobs posted in ${hoursLabel}…`;
     $("#jobs-results").innerHTML = "";
     $("#jobs-loader").style.display = "flex";
     $("#download-csv-btn").style.display = "none";
@@ -760,7 +764,7 @@
       const stillWaiting = requestedSites.some(s => siteCounts[s] === null);
       const note = stillWaiting ? " LinkedIn is usually the slowest — can take up to a minute, keep this open." : "";
       const correctionNote = correctedFrom ? ` (auto-corrected from "${correctedFrom}")` : "";
-      $("#jobs-status").textContent = `${total} result${total === 1 ? "" : "s"} posted in the last 24 hrs so far for "${term}"${location ? " in " + location : ""}.${correctionNote} (${breakdown})${note}`;
+      $("#jobs-status").textContent = `${total} result${total === 1 ? "" : "s"} posted in ${hoursLabel} so far for "${term}"${location ? " in " + location : ""}.${correctionNote} (${breakdown})${note}`;
       $("#jobs-loader").style.display = stillWaiting ? "flex" : "none";
       $("#download-csv-btn").style.display = (!stillWaiting && currentSearchJobs.length) ? "" : "none";
     };
@@ -774,7 +778,7 @@
           search_term: term,
           location: locationForApi,
           sites: requestedSites,
-          hours_old: 24,
+          hours_old: hoursOld,
           results_wanted: 200,
           timeout_seconds: 280,
           country_indeed: country,

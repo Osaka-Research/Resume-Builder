@@ -644,6 +644,20 @@
     color: var(--ink);
   }
 
+  .jobs-search-sub select {
+    flex: 1 1 110px;
+    min-width: 0;
+    padding: 8px 12px;
+    font-size: 16px;
+    font-family: inherit;
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    background: #fff;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .jobs-search-sub select:hover { border-color: var(--accent); }
+
   /* ── Custom country dropdown (replaces native <select> for a11y/style control) ── */
   .country-select { position: relative; flex: 1 1 100px; min-width: 0; }
 
@@ -835,6 +849,13 @@
     </div>
     <div class="jobs-search-sub">
       <input id="job-location" type="text" placeholder="City (e.g. Remote, Bengaluru)">
+      <select id="job-hours" aria-label="Posted within">
+        <option value="24" selected>Past 24 hrs</option>
+        <option value="72">Past 3 days</option>
+        <option value="168">Past week</option>
+        <option value="336">Past 2 weeks</option>
+        <option value="720">Past month</option>
+      </select>
       <div class="country-select" id="job-country" data-value="usa">
         <button type="button" class="country-select-btn" id="job-country-btn" aria-haspopup="listbox" aria-expanded="false">
           <span id="job-country-label">USA</span>
@@ -861,7 +882,7 @@
   <div id="jobs-results"></div>
   <div class="jobs-loader" id="jobs-loader" style="display:none">
     <div class="spinner"></div>
-    <span>Still searching jobs posted in the last 24 hrs — some job boards take longer than others…</span>
+    <span>Still searching — some job boards take longer than others…</span>
   </div>
 </div>
 
