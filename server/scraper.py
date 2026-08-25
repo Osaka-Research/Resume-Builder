@@ -11,9 +11,11 @@ to know about jobspy's per-site quirks.
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import logging
 import os
 import re
+import threading
 from typing import Any
 
 import pandas as pd
@@ -26,7 +28,16 @@ DEFAULT_HOURS_OLD = int(os.getenv("SCRAPE_DEFAULT_HOURS_OLD", "168"))
 DEFAULT_RESULTS_WANTED = int(os.getenv("SCRAPE_MAX_PER_SITE", "50"))
 DEFAULT_TIMEOUT_SECONDS = int(os.getenv("SCRAPE_TIMEOUT_SECONDS", "90"))
 
-ALLOWED_SITES = {"linkedin", "indeed", "glassdoor", "zip_recruiter", "google"}
+ALLOWED_SITES = {"linkedin", "indeed", "glassdoor", "zip_recruiter", "google", "naukri"}
+
+# Naukri's free-tier anti-bot is much more easily tripped than the other sites --
+# gate it behind an explicit opt-in, cap how much we ask for, and never run more
+# than one naukri scrape at a time regardless of how many searches are in flight,
+# so it can't get our IP flagged or hammer their server. Off by default: an
+# operator has to deliberately "allocate" it via env var before it does anything.
+NAUKRI_ENABLED = os.getenv("SCRAPE_ENABLE_NAUKRI", "false").strip().lower() in ("1", "true", "yes")
+NAUKRI_MAX_RESULTS = int(os.getenv("SCRAPE_NAUKRI_MAX_RESULTS", "30"))
+_NAUKRI_LOCK = threading.Semaphore(1)
 
 # global semaphore — limits concurrent scrapes regardless of which endpoint hit
 _SEM: asyncio.Semaphore | None = None
@@ -125,7 +136,47 @@ def _scrape_one_site_sync(
     """Same as _scrape_sync but for exactly one site -- lets the caller dispatch
     sites as separate thread-pool tasks so each site's results are available as
     soon as that site finishes, instead of waiting on the slowest one."""
+    if site == "naukri":
+        if not NAUKRI_ENABLED:
+            raise RuntimeError("naukri scraping is disabled on this deployment (set SCRAPE_ENABLE_NAUKRI=true)")
+        results_wanted = min(results_wanted, NAUKRI_MAX_RESULTS)
+        with _NAUKRI_LOCK:
+            return _scrape_sync([site], search_term, location, hours_old, results_wanted, country_indeed)
     return _scrape_sync([site], search_term, location, hours_old, results_wanted, country_indeed)
+
+
+def _scrape_multi_sync(
+    sites: list[str],
+    search_term: str,
+    location: str,
+    hours_old: int,
+    results_wanted: int,
+    country_indeed: str,
+) -> list[dict[str, Any]]:
+    """Runs each site as its own isolated call instead of one combined jobspy
+    call -- so a broken or rate-limited site (naukri especially) can't take
+    the working sites' results down with it. Used by the non-streaming
+    /api/scrape endpoint; /api/scrape-stream already isolates per-site via
+    separate executor tasks."""
+    all_jobs: list[dict[str, Any]] = []
+    seen_urls: set[str] = set()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(sites))) as pool:
+        futures = {
+            pool.submit(_scrape_one_site_sync, site, search_term, location, hours_old, results_wanted, country_indeed): site
+            for site in sites
+        }
+        for fut in concurrent.futures.as_completed(futures):
+            site = futures[fut]
+            try:
+                jobs = fut.result()
+            except Exception:
+                log.exception(f"site failed (non-streaming, falling back to other sites): {site}")
+                continue
+            for j in jobs:
+                if j.get("url") not in seen_urls:
+                    seen_urls.add(j.get("url"))
+                    all_jobs.append(j)
+    return all_jobs
 
 
 async def scrape_streaming(
@@ -233,7 +284,7 @@ async def scrape(
             jobs = await asyncio.wait_for(
                 loop.run_in_executor(
                     None,
-                    _scrape_sync,
+                    _scrape_multi_sync,
                     sites,
                     search_term,
                     location,

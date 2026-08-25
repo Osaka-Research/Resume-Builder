@@ -518,7 +518,7 @@
     return (s || "").replace(/"/g, "&quot;");
   }
 
-  const SITE_LABELS = { indeed: "Indeed", linkedin: "LinkedIn", glassdoor: "Glassdoor", zip_recruiter: "ZipRecruiter", google: "Google" };
+  const SITE_LABELS = { indeed: "Indeed", linkedin: "LinkedIn", glassdoor: "Glassdoor", zip_recruiter: "ZipRecruiter", google: "Google", naukri: "Naukri" };
 
   function jobCardHtml(j) {
     const dTitle = escapeAttr(j.title);
@@ -594,7 +594,9 @@
     };
     logJobClick(el.dataset.clickAction, job);
     if (el.dataset.clickAction === "generate_resume") {
-      generateResumeForJob(job.title, job.company);
+      const full = currentSearchJobs.find(j =>
+        j.title === job.title && j.company === job.company && j.url === job.url);
+      generateResumeForJob(job.title, job.company, full ? full.description : "");
     } else if (el.dataset.clickAction === "share_job") {
       shareJob(job, el);
     }
@@ -747,7 +749,7 @@
     currentSearchJobs = [];
     currentSearchLabel = term + (location ? " in " + location : "");
     lastSearchTerm = term;
-    const requestedSites = ["indeed", "linkedin", "glassdoor", "zip_recruiter", "google"];
+    const requestedSites = ["indeed", "linkedin", "glassdoor", "zip_recruiter", "google", "naukri"];
     const siteCounts = Object.fromEntries(requestedSites.map(s => [s, null])); // null = still running
     let total = 0;
 
@@ -820,7 +822,7 @@
     }
   }
 
-  function generateResumeForJob(title, company) {
+  function generateResumeForJob(title, company, description) {
     $("#f-headline").value = title;
     // Don't clobber a summary the person already wrote -- only seed one if it's empty.
     const summaryEl = $("#f-summary");
@@ -829,9 +831,47 @@
         ? `Aiming for the ${title} role at ${company}.`
         : `Aiming for a ${title} role.`;
     }
+    if (description) $("#f-jd").value = description;
     render();
     showBuildView();
   }
+
+  // ── AI summary generation (step 2), from pasted/seeded JD ──
+
+  $("#ai-summary-btn").addEventListener("click", async () => {
+    const jd = $("#f-jd").value.trim();
+    const statusEl = $("#ai-summary-status");
+    const btn = $("#ai-summary-btn");
+    if (!jd) {
+      statusEl.textContent = "Paste a job description above first.";
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = "Generating…";
+    statusEl.textContent = "";
+    try {
+      const res = await fetch(JOBS_API + "/api/generate-summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jd,
+          name: $("#f-name").value.trim(),
+          headline: $("#f-headline").value.trim(),
+          skills: $("#f-skills").value.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Request failed");
+      $("#f-summary").value = data.summary || "";
+      render();
+      statusEl.textContent = "";
+    } catch (err) {
+      statusEl.textContent = "Couldn't generate a summary right now. Try again in a moment.";
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "✨ Generate summary with AI";
+    }
+  });
 
   // ── CSV export ──
 

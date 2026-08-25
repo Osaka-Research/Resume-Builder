@@ -14,6 +14,7 @@ import logging
 import os
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
@@ -31,6 +32,10 @@ logging.basicConfig(
 log = logging.getLogger("agent-jobs.main")
 
 VERSION = "1.0.0"
+
+MINIMAX_API_KEY = os.getenv("MINIMAX_API_KEY", "")
+MINIMAX_API_URL = os.getenv("MINIMAX_API_URL", "https://api.minimax.io/v1/text/chatcompletion_v2")
+MINIMAX_MODEL = os.getenv("MINIMAX_MODEL", "MiniMax-Text-01")
 
 app = FastAPI(
     title="Agent Jobs",
@@ -68,6 +73,70 @@ async def health() -> dict:
         "sites_default": scraper.DEFAULT_SITES,
         "timeout_default_s": scraper.DEFAULT_TIMEOUT_SECONDS,
     }
+
+
+class GenerateSummaryRequest(BaseModel):
+    jd: str = Field(..., min_length=1, max_length=8000, description="job description text")
+    name: str = Field("", max_length=200)
+    headline: str = Field("", max_length=200)
+    skills: str = Field("", max_length=500, description="comma-separated skills")
+
+
+@app.post("/api/generate-summary")
+async def generate_summary(req: GenerateSummaryRequest) -> dict:
+    if not MINIMAX_API_KEY:
+        raise HTTPException(status_code=503, detail="AI summary generation is not configured (missing MINIMAX_API_KEY).")
+
+    profile_bits = []
+    if req.headline:
+        profile_bits.append(f"Target role: {req.headline}")
+    if req.skills:
+        profile_bits.append(f"Skills: {req.skills}")
+    profile = "\n".join(profile_bits) or "No extra profile details given."
+
+    prompt = (
+        "Write a 2-3 sentence professional resume summary tailored to the job description "
+        "below. Mirror its key requirements and keywords naturally, but stay truthful to the "
+        "candidate's given profile -- don't invent experience or skills that aren't implied by it. "
+        "Return only the summary text, no preamble, no quotes.\n\n"
+        f"Candidate profile:\n{profile}\n\n"
+        f"Job description:\n{req.jd.strip()[:6000]}"
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                MINIMAX_API_URL,
+                headers={
+                    "Authorization": f"Bearer {MINIMAX_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": MINIMAX_MODEL,
+                    "messages": [
+                        {"role": "system", "name": "assistant", "content": "You are a concise, expert resume writer."},
+                        {"role": "user", "name": "user", "content": prompt},
+                    ],
+                },
+            )
+        resp.raise_for_status()
+        data = resp.json()
+    except httpx.HTTPError:
+        log.exception("minimax request failed")
+        raise HTTPException(status_code=502, detail="AI summary service is unreachable right now.")
+
+    base_resp = data.get("base_resp") or {}
+    if base_resp.get("status_code", 0) not in (0, None):
+        log.error("minimax error: %s", base_resp)
+        raise HTTPException(status_code=502, detail=base_resp.get("status_msg") or "AI summary service error.")
+
+    try:
+        summary = data["choices"][0]["message"]["content"].strip()
+    except (KeyError, IndexError, AttributeError):
+        log.error("unexpected minimax response shape: %s", data)
+        raise HTTPException(status_code=502, detail="AI summary service returned an unexpected response.")
+
+    return {"summary": summary}
 
 
 @app.post("/api/scrape")
