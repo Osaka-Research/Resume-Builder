@@ -54,13 +54,6 @@
     exitFinalPreview();
   });
 
-  $("#export-btn").addEventListener("click", exportResumeData);
-  $("#import-file-input").addEventListener("change", (e) => {
-    const file = e.target.files[0];
-    if (file) importResumeData(file);
-    e.target.value = ""; // allow re-importing the same filename later
-  });
-
   // ── Wizard: one section of the form visible at a time, instead of the
   // whole thing crammed on screen. Sample data pre-fills every field so
   // nothing starts blank; the first click into a still-unedited field
@@ -453,41 +446,6 @@
       "d-degree": e.degree, "d-school": e.school, "d-location": e.location,
       "d-start": e.start, "d-end": e.end,
     }));
-  }
-
-  function exportResumeData() {
-    const data = loadResumeData() || {};
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "resume-data.json";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }
-
-  function importResumeData(file) {
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const data = JSON.parse(reader.result);
-        document.querySelectorAll(".form-panel input, .form-panel textarea").forEach(el => {
-          el.value = "";
-          el.classList.remove("mock-value");
-        });
-        document.getElementById("experience-list").innerHTML = "";
-        document.getElementById("education-list").innerHTML = "";
-        restoreResumeData(data);
-        render();
-        showWizardStep(0);
-        setUploadStatus("Loaded resume-data.json.", true);
-      } catch {
-        setUploadStatus("That file isn't a valid resume-data.json export.", false);
-      }
-    };
-    reader.readAsText(file);
   }
 
   // ── View switching (Jobs is the homepage; Build Resume is reached from a
@@ -916,6 +874,32 @@
 
   $("#job-search-btn").addEventListener("click", runJobSearch);
   $("#job-location").addEventListener("keydown", e => { if (e.key === "Enter") runJobSearch(); });
+
+  // ── Android on-screen keyboard: the hero is vertically centered with vh
+  // padding, which doesn't shrink when the keyboard opens on most Android
+  // browsers/WebViews -- the focused input can end up hidden behind it.
+  // Shrink the hero to the top on focus, and nudge the focused field into
+  // view once the keyboard has actually finished animating in. ──
+  (function setupKeyboardAdjust() {
+    const jobsView = $("#jobs-view");
+    const trackedInputs = ["#job-search-term", "#job-location"].map($);
+    const isTrackedFocused = () => trackedInputs.includes(document.activeElement);
+
+    trackedInputs.forEach(el => {
+      el.addEventListener("focus", () => jobsView.classList.add("kb-open"));
+      el.addEventListener("blur", () => {
+        setTimeout(() => { if (!isTrackedFocused()) jobsView.classList.remove("kb-open"); }, 50);
+      });
+    });
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", () => {
+        if (isTrackedFocused()) {
+          document.activeElement.scrollIntoView({ block: "center", behavior: "smooth" });
+        }
+      });
+    }
+  })();
 
   // ── Search-term autocomplete (Google-style, suggests against the same
   // job-search dictionary the auto-correct above uses) ──

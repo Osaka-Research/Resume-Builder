@@ -70,18 +70,6 @@
     color: var(--accent);
   }
 
-  .build-topbar .actions .import-btn {
-    display: inline-block;
-    font-size: 14px;
-    font-weight: 600;
-    padding: 9px 18px;
-    border-radius: 6px;
-    border: 1px solid var(--accent);
-    background: #fff;
-    color: var(--accent);
-    cursor: pointer;
-  }
-
   /* ── Layout: the wizard form and the final preview are mutually exclusive
      full-width states now, not a permanent side-by-side grid. ── */
 
@@ -521,7 +509,8 @@
     transition: padding 0.25s ease;
   }
 
-  #jobs-view.searched .jobs-hero {
+  #jobs-view.searched .jobs-hero,
+  #jobs-view.kb-open .jobs-hero {
     flex: none;
     padding: 24px 0 16px;
   }
@@ -891,9 +880,6 @@
   <div class="build-topbar">
     <button class="back-to-jobs" id="back-to-jobs-btn">← Find Jobs</button>
     <div class="actions">
-      <button class="secondary" id="export-btn">⬇ Save copy</button>
-      <label class="secondary import-btn" for="import-file-input">⬆ Load copy</label>
-      <input id="import-file-input" type="file" accept=".json" style="display:none">
       <button class="secondary" id="clear-btn">Clear all</button>
     </div>
   </div>
