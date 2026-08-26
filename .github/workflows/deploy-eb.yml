@@ -1,0 +1,71 @@
+name: Deploy to Elastic Beanstalk
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "server/**"
+      - ".github/workflows/deploy-eb.yml"
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-south-1
+  EB_APPLICATION: resume-builder-jobs
+  EB_ENVIRONMENT: resume-builder-jobs-env
+  EB_BUCKET: elasticbeanstalk-ap-south-1-265544357989
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::265544357989:role/github-actions-eb-deploy-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Zip server bundle
+        run: |
+          cd server
+          zip -r ../eb-deploy.zip . \
+            -x "__pycache__/*" -x "*/__pycache__/*" -x "*.pyc" \
+            -x "app/*" -x ".venv/*" -x ".venv-debian/*" -x "data/*" -x "*.db"
+
+      - name: Upload bundle to S3
+        run: |
+          VERSION="gh-${GITHUB_SHA::8}-${GITHUB_RUN_NUMBER}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          aws s3 cp eb-deploy.zip "s3://${EB_BUCKET}/${EB_APPLICATION}/eb-deploy-${VERSION}.zip"
+
+      - name: Create application version
+        run: |
+          aws elasticbeanstalk create-application-version \
+            --application-name "$EB_APPLICATION" \
+            --version-label "$VERSION" \
+            --source-bundle "S3Bucket=${EB_BUCKET},S3Key=${EB_APPLICATION}/eb-deploy-${VERSION}.zip" \
+            --process
+
+      - name: Wait for version to finish processing
+        run: |
+          for i in $(seq 1 30); do
+            STATUS=$(aws elasticbeanstalk describe-application-versions \
+              --application-name "$EB_APPLICATION" --version-labels "$VERSION" \
+              --query "ApplicationVersions[0].Status" --output text)
+            echo "status: $STATUS"
+            [ "$STATUS" = "PROCESSED" ] && exit 0
+            [ "$STATUS" = "FAILED" ] && { echo "version processing failed"; exit 1; }
+            sleep 5
+          done
+          echo "timed out waiting for version to process"; exit 1
+
+      - name: Deploy to environment
+        run: |
+          aws elasticbeanstalk update-environment \
+            --environment-name "$EB_ENVIRONMENT" \
+            --version-label "$VERSION"
