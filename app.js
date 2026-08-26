@@ -150,51 +150,34 @@
   // education fields without a real parsing service, so this deliberately
   // doesn't pretend to -- it just saves retyping, review/reorganize by hand. ──
 
+  let pdfJsLib = null;
   let pdfJsLoadPromise = null;
 
-  // Two independent CDNs -- if one's blocked (network filter, regional CDN
-  // outage, ad-blocker false positive) or just having a bad moment, the other
-  // still gets the feature working instead of a hard failure.
-  const PDFJS_SOURCES = [
-    { lib: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.js",
-      worker: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js" },
-    { lib: "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.min.js",
-      worker: "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.js" },
-  ];
-
-  function loadScript(src) {
-    return new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = src;
-      script.onload = resolve;
-      script.onerror = () => reject(new Error("script load failed: " + src));
-      document.head.appendChild(script);
-    });
-  }
-
+  // Vendored locally (vendor/pdfjs/) rather than pulled from a CDN -- the
+  // CDN version this used to point at (cdnjs, pinned to an old pdf.js
+  // release) got pruned server-side and started 404ing outright, and
+  // relying on any third-party domain here is one more thing that can be
+  // blocked by a network filter or ad-blocker. Same-origin, nothing to block.
   function loadPdfJs() {
-    if (window.pdfjsLib) return Promise.resolve();
+    if (pdfJsLib) return Promise.resolve(pdfJsLib);
     if (pdfJsLoadPromise) return pdfJsLoadPromise;
-    pdfJsLoadPromise = (async () => {
-      let lastErr;
-      for (const source of PDFJS_SOURCES) {
-        try {
-          await loadScript(source.lib);
-          window.pdfjsLib.GlobalWorkerOptions.workerSrc = source.worker;
-          return;
-        } catch (err) {
-          lastErr = err;
-        }
-      }
-      throw new Error("Couldn't load the PDF reader (no internet, or both CDNs are unreachable?).");
-    })().catch(err => { pdfJsLoadPromise = null; throw err; });
+    pdfJsLoadPromise = import("./vendor/pdfjs/pdf.min.mjs")
+      .then(mod => {
+        mod.GlobalWorkerOptions.workerSrc = "vendor/pdfjs/pdf.worker.min.mjs";
+        pdfJsLib = mod;
+        return mod;
+      })
+      .catch(err => {
+        pdfJsLoadPromise = null;
+        throw new Error("Couldn't load the PDF reader: " + (err.message || err));
+      });
     return pdfJsLoadPromise;
   }
 
   async function extractPdfText(file) {
-    await loadPdfJs();
+    const pdfjsLib = await loadPdfJs();
     const buf = await file.arrayBuffer();
-    const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
     let text = "";
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
