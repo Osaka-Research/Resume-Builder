@@ -152,20 +152,42 @@
 
   let pdfJsLoadPromise = null;
 
+  // Two independent CDNs -- if one's blocked (network filter, regional CDN
+  // outage, ad-blocker false positive) or just having a bad moment, the other
+  // still gets the feature working instead of a hard failure.
+  const PDFJS_SOURCES = [
+    { lib: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.js",
+      worker: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js" },
+    { lib: "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.min.js",
+      worker: "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.js" },
+  ];
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = src;
+      script.onload = resolve;
+      script.onerror = () => reject(new Error("script load failed: " + src));
+      document.head.appendChild(script);
+    });
+  }
+
   function loadPdfJs() {
     if (window.pdfjsLib) return Promise.resolve();
     if (pdfJsLoadPromise) return pdfJsLoadPromise;
-    pdfJsLoadPromise = new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.js";
-      script.onload = () => {
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-          "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js";
-        resolve();
-      };
-      script.onerror = () => reject(new Error("Couldn't load the PDF reader (no internet?)."));
-      document.head.appendChild(script);
-    });
+    pdfJsLoadPromise = (async () => {
+      let lastErr;
+      for (const source of PDFJS_SOURCES) {
+        try {
+          await loadScript(source.lib);
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = source.worker;
+          return;
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      throw new Error("Couldn't load the PDF reader (no internet, or both CDNs are unreachable?).");
+    })().catch(err => { pdfJsLoadPromise = null; throw err; });
     return pdfJsLoadPromise;
   }
 
