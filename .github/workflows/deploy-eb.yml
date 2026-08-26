@@ -48,24 +48,25 @@ jobs:
           aws elasticbeanstalk create-application-version \
             --application-name "$EB_APPLICATION" \
             --version-label "$VERSION" \
-            --source-bundle "S3Bucket=${EB_BUCKET},S3Key=${EB_APPLICATION}/eb-deploy-${VERSION}.zip" \
-            --process
-
-      - name: Wait for version to finish processing
-        run: |
-          for i in $(seq 1 30); do
-            STATUS=$(aws elasticbeanstalk describe-application-versions \
-              --application-name "$EB_APPLICATION" --version-labels "$VERSION" \
-              --query "ApplicationVersions[0].Status" --output text)
-            echo "status: $STATUS"
-            [ "$STATUS" = "PROCESSED" ] && exit 0
-            [ "$STATUS" = "FAILED" ] && { echo "version processing failed"; exit 1; }
-            sleep 5
-          done
-          echo "timed out waiting for version to process"; exit 1
+            --source-bundle "S3Bucket=${EB_BUCKET},S3Key=${EB_APPLICATION}/eb-deploy-${VERSION}.zip"
 
       - name: Deploy to environment
         run: |
           aws elasticbeanstalk update-environment \
             --environment-name "$EB_ENVIRONMENT" \
             --version-label "$VERSION"
+
+      - name: Wait for environment to finish updating
+        run: |
+          for i in $(seq 1 60); do
+            read -r STATUS HEALTH <<< "$(aws elasticbeanstalk describe-environments \
+              --environment-names "$EB_ENVIRONMENT" \
+              --query "Environments[0].[Status,Health]" --output text)"
+            echo "status: $STATUS  health: $HEALTH"
+            if [ "$STATUS" = "Ready" ]; then
+              [ "$HEALTH" = "Red" ] && { echo "environment unhealthy after deploy"; exit 1; }
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "timed out waiting for environment"; exit 1
