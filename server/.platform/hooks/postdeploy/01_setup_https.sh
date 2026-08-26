@@ -16,7 +16,7 @@ fi
 if [ ! -f "$CERT_DIR/fullchain.pem" ]; then
   systemctl stop nginx || true
   certbot certonly --standalone -d "$DOMAIN" --non-interactive --agree-tos \
-    -m admin@example.com --no-eff-email || true
+    --register-unsafely-without-email || true
   systemctl start nginx || true
 else
   certbot renew --standalone \
