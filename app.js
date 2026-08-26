@@ -475,7 +475,7 @@
     return (s || "").replace(/"/g, "&quot;");
   }
 
-  const SITE_LABELS = { indeed: "Indeed", linkedin: "LinkedIn", glassdoor: "Glassdoor", zip_recruiter: "ZipRecruiter", google: "Google", naukri: "Naukri" };
+  const SITE_LABELS = { indeed: "Indeed", linkedin: "LinkedIn", glassdoor: "Glassdoor", zip_recruiter: "ZipRecruiter", google: "Google", naukri: "Naukri", simplyhired: "SimplyHired" };
 
   function jobCardHtml(j) {
     const dTitle = escapeAttr(j.title);
@@ -710,7 +710,7 @@
     currentSearchJobs = [];
     currentSearchLabel = term + (location ? " in " + location : "");
     lastSearchTerm = term;
-    const requestedSites = ["indeed", "linkedin", "glassdoor", "zip_recruiter", "google", "naukri"];
+    const requestedSites = ["indeed", "linkedin", "glassdoor", "zip_recruiter", "google", "naukri", "simplyhired"];
     const siteCounts = Object.fromEntries(requestedSites.map(s => [s, null])); // null = still running
     let total = 0;
 

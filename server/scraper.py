@@ -12,12 +12,16 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import json
 import logging
 import os
 import re
 import threading
+import time
+import urllib.parse
 from typing import Any
 
+import cloudscraper
 import pandas as pd
 from jobspy import scrape_jobs
 
@@ -28,7 +32,7 @@ DEFAULT_HOURS_OLD = int(os.getenv("SCRAPE_DEFAULT_HOURS_OLD", "168"))
 DEFAULT_RESULTS_WANTED = int(os.getenv("SCRAPE_MAX_PER_SITE", "50"))
 DEFAULT_TIMEOUT_SECONDS = int(os.getenv("SCRAPE_TIMEOUT_SECONDS", "90"))
 
-ALLOWED_SITES = {"linkedin", "indeed", "glassdoor", "zip_recruiter", "google", "naukri"}
+ALLOWED_SITES = {"linkedin", "indeed", "glassdoor", "zip_recruiter", "google", "naukri", "simplyhired"}
 
 # Naukri's free-tier anti-bot is much more easily tripped than the other sites --
 # gate it behind an explicit opt-in, cap how much we ask for, and never run more
@@ -38,6 +42,119 @@ ALLOWED_SITES = {"linkedin", "indeed", "glassdoor", "zip_recruiter", "google", "
 NAUKRI_ENABLED = os.getenv("SCRAPE_ENABLE_NAUKRI", "false").strip().lower() in ("1", "true", "yes")
 NAUKRI_MAX_RESULTS = int(os.getenv("SCRAPE_NAUKRI_MAX_RESULTS", "30"))
 _NAUKRI_LOCK = threading.Semaphore(1)
+
+# jobspy has no SimplyHired support at all -- it's scraped directly here via
+# cloudscraper (SimplyHired sits behind a Cloudflare JS challenge that plain
+# requests can't pass). Same opt-in/rate-limit treatment as naukri: fragile
+# by nature (breaks whenever Cloudflare's challenge changes), so it's off by
+# default and capped/serialized to avoid hammering them.
+SIMPLYHIRED_ENABLED = os.getenv("SCRAPE_ENABLE_SIMPLYHIRED", "false").strip().lower() in ("1", "true", "yes")
+SIMPLYHIRED_MAX_RESULTS = int(os.getenv("SCRAPE_SIMPLYHIRED_MAX_RESULTS", "40"))
+_SIMPLYHIRED_LOCK = threading.Semaphore(1)
+_simplyhired_scraper = None
+_NEXT_DATA_RE = re.compile(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', re.S)
+
+
+def _get_simplyhired_scraper():
+    global _simplyhired_scraper
+    if _simplyhired_scraper is None:
+        _simplyhired_scraper = cloudscraper.create_scraper()
+    return _simplyhired_scraper
+
+
+def _parse_simplyhired_salary(salary_info: str | None) -> tuple[Any, Any, Any, Any]:
+    if not salary_info:
+        return None, None, None, None
+    s = salary_info.lower()
+    if "year" in s:
+        interval = "yearly"
+    elif "hour" in s:
+        interval = "hourly"
+    elif "month" in s:
+        interval = "monthly"
+    elif "week" in s:
+        interval = "weekly"
+    else:
+        interval = None
+    nums = [float(n.replace(",", "")) for n in re.findall(r"[\d,]+(?:\.\d+)?", salary_info)]
+    if not nums:
+        return None, None, None, interval
+    if len(nums) >= 2:
+        return nums[0], nums[1], "USD", interval
+    return nums[0], nums[0], "USD", interval
+
+
+def _scrape_simplyhired_sync(
+    search_term: str,
+    location: str,
+    hours_old: int,
+    results_wanted: int,
+) -> list[dict[str, Any]]:
+    """SimplyHired's search page is server-rendered Next.js -- the full result
+    set for the page is embedded as JSON in a __NEXT_DATA__ script tag, so this
+    parses that directly instead of scraping HTML. Pagination is by opaque
+    cursor token (not a page number); the first page's response hands back
+    cursors for the next several pages up front."""
+    scraper = _get_simplyhired_scraper()
+    results_wanted = min(results_wanted, SIMPLYHIRED_MAX_RESULTS)
+    cutoff_ms = (time.time() - hours_old * 3600) * 1000
+
+    jobs: list[dict[str, Any]] = []
+    seen_keys: set[str] = set()
+    cursors: dict[str, str] = {}
+    page = 1
+    while len(jobs) < results_wanted and page <= 4:
+        params = {"q": search_term, "l": location or ""}
+        if page > 1:
+            cursor = cursors.get(str(page))
+            if not cursor:
+                break
+            params["cursor"] = cursor
+        url = "https://www.simplyhired.com/search?" + urllib.parse.urlencode(params)
+        resp = scraper.get(url, timeout=20)
+        if resp.status_code != 200:
+            break
+        m = _NEXT_DATA_RE.search(resp.text)
+        if not m:
+            break
+        page_props = json.loads(m.group(1)).get("props", {}).get("pageProps", {})
+        if page == 1:
+            cursors = page_props.get("pageCursors") or {}
+        page_jobs = page_props.get("jobs") or []
+        if not page_jobs:
+            break
+
+        for j in page_jobs:
+            key = j.get("jobKey")
+            if not key or key in seen_keys:
+                continue
+            seen_keys.add(key)
+            posted_ms = j.get("dateOnIndeed")
+            if posted_ms is not None and posted_ms < cutoff_ms:
+                continue
+            salary_min, salary_max, currency, interval = _parse_simplyhired_salary(j.get("salaryInfo"))
+            job_types = j.get("jobTypes") or []
+            jobs.append({
+                "id": key,
+                "title": (j.get("title") or "").strip(),
+                "company": (j.get("company") or "").strip(),
+                "location": (j.get("location") or "").strip(),
+                "site": "simplyhired",
+                "url": "https://www.simplyhired.com" + (j.get("botUrl") or ""),
+                "date_posted": None,
+                "salary_min": salary_min,
+                "salary_max": salary_max,
+                "salary_currency": currency,
+                "interval": interval,
+                "description": (j.get("snippet") or "").strip()[:2000],
+                "is_remote": "Remote" in (j.get("remoteAttributes") or []),
+                "job_type": job_types[0] if job_types else None,
+            })
+            if len(jobs) >= results_wanted:
+                break
+        page += 1
+    return jobs
+
 
 # global semaphore — limits concurrent scrapes regardless of which endpoint hit
 _SEM: asyncio.Semaphore | None = None
@@ -142,6 +259,11 @@ def _scrape_one_site_sync(
         results_wanted = min(results_wanted, NAUKRI_MAX_RESULTS)
         with _NAUKRI_LOCK:
             return _scrape_sync([site], search_term, location, hours_old, results_wanted, country_indeed)
+    if site == "simplyhired":
+        if not SIMPLYHIRED_ENABLED:
+            raise RuntimeError("simplyhired scraping is disabled on this deployment (set SCRAPE_ENABLE_SIMPLYHIRED=true)")
+        with _SIMPLYHIRED_LOCK:
+            return _scrape_simplyhired_sync(search_term, location, hours_old, results_wanted)
     return _scrape_sync([site], search_term, location, hours_old, results_wanted, country_indeed)
 
 
