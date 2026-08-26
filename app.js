@@ -450,7 +450,7 @@
   // ── View switching (Jobs is the homepage; Build Resume is reached from a
   // job result's "Generate Resume" button, or the back link once there) ──
 
-  const JOBS_API = "https://agent-jobs-e7ke.onrender.com";
+  const JOBS_API = "https://13-126-187-97.sslip.io";
   let currentSearchJobs = [];
   let currentSearchLabel = "jobs";
   let lastSearchTerm = "";
