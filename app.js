@@ -224,8 +224,7 @@
       summaryEl.value = note + text.slice(0, 4000);
       summaryEl.classList.remove("mock-value");
       render();
-      setUploadStatus("Extracted " + file.name + " -- opening Summary so you can review it.", true);
-      showWizardStep(1);
+      setUploadStatus("Extracted " + file.name + " -- available in the Summary step (Step 2) for you to review.", true);
     } catch (err) {
       setUploadStatus(err.message || "Couldn't extract text from that file.", false);
     }
