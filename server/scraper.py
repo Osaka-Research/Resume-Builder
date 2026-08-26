@@ -113,6 +113,7 @@ def _scrape_simplyhired_sync(
         url = "https://www.simplyhired.com/search?" + urllib.parse.urlencode(params)
         resp = scraper.get(url, timeout=20)
         if resp.status_code != 200:
+            log.warning(f"simplyhired page {page} returned status {resp.status_code}: {resp.text[:300]!r}")
             break
         m = _NEXT_DATA_RE.search(resp.text)
         if not m:
