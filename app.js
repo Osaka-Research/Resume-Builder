@@ -202,6 +202,55 @@
     el.className = "upload-status " + (ok ? "ok" : "error");
   }
 
+  // Best-effort extraction of a few high-confidence Personal Info fields from
+  // raw resume text -- email/phone/link are reliable regex targets, name is a
+  // first-line heuristic (works for the vast majority of resumes, which lead
+  // with the person's name on its own line). Never overwrites a field the
+  // person already filled in, and doesn't touch anything else (Experience/
+  // Education still need a human -- too varied/error-prone to guess at).
+  const SECTION_HEADER_WORDS = /^(summary|profile|objective|experience|education|skills|contact|projects|certifications|about)\b/i;
+
+  function guessPersonalInfo(text) {
+    const emailMatch = text.match(/[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}/);
+    // Digit-count-based rather than a fixed grouping pattern -- phone formats
+    // vary a lot by country (e.g. "98765 43210" in India vs "(415) 555-0192"
+    // in the US), so match any digit-and-punctuation run with a plausible
+    // total digit count instead of assuming one grouping shape.
+    const dateShaped = /^\d{4}[-/]\d{1,2}[-/]\d{1,2}$|^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}$/;
+    const phoneCandidates = text.match(/\+?\(?\d[\d\-.\s()]{6,}\d/g) || [];
+    const phoneMatch = phoneCandidates.find(c => {
+      const digits = (c.match(/\d/g) || []).length;
+      return digits >= 7 && digits <= 15 && !dateShaped.test(c.trim());
+    });
+    const linkedinMatch = text.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/[a-zA-Z0-9\-_%]+/i);
+    const githubMatch = text.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/[a-zA-Z0-9\-_]+/i);
+
+    let name = "";
+    for (const rawLine of text.split("\n")) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      if (line.length > 60 || /\d/.test(line) || line.includes("@") || SECTION_HEADER_WORDS.test(line)) continue;
+      name = line;
+      break;
+    }
+
+    return {
+      name,
+      email: emailMatch ? emailMatch[0] : "",
+      phone: phoneMatch ? phoneMatch.trim() : "",
+      link: linkedinMatch ? linkedinMatch[0] : (githubMatch ? githubMatch[0] : ""),
+    };
+  }
+
+  function fillIfEmpty(id, value) {
+    if (!value) return false;
+    const el = $("#" + id);
+    if (el.value.trim()) return false;
+    el.value = value;
+    el.classList.remove("mock-value");
+    return true;
+  }
+
   $("#resume-upload-input").addEventListener("change", async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -228,8 +277,19 @@
       const note = "--- Extracted from " + file.name + " -- review and copy details into the right steps below ---\n\n";
       summaryEl.value = note + text.slice(0, 4000);
       summaryEl.classList.remove("mock-value");
+
+      const guessed = guessPersonalInfo(text);
+      const filled = [];
+      if (fillIfEmpty("f-name", guessed.name)) filled.push("name");
+      if (fillIfEmpty("f-email", guessed.email)) filled.push("email");
+      if (fillIfEmpty("f-phone", guessed.phone)) filled.push("phone");
+      if (fillIfEmpty("f-link", guessed.link)) filled.push("link");
+
       render();
-      setUploadStatus("Extracted " + file.name + " -- available in the Summary step (Step 2) for you to review.", true);
+      const filledNote = filled.length
+        ? ` Also guessed ${filled.join(", ")} in Personal Info (Step 1) -- please double-check.`
+        : "";
+      setUploadStatus("Extracted " + file.name + " -- available in the Summary step (Step 2) for you to review." + filledNote, true);
     } catch (err) {
       setUploadStatus(err.message || "Couldn't extract text from that file.", false);
     }
