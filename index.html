@@ -898,15 +898,15 @@
 
     <div class="section" data-step="0">
       <h2>Personal Info</h2>
-      <div class="field"><label>Full Name</label><input id="f-name" type="text" placeholder="Jordan Rivera"></div>
-      <div class="field"><label>Headline / Target Role</label><input id="f-headline" type="text" placeholder="Frontend Engineer"></div>
+      <div class="field"><label>Full Name</label><input id="f-name" type="text" autocomplete="off"></div>
+      <div class="field"><label>Headline / Target Role</label><input id="f-headline" type="text" autocomplete="off"></div>
       <div class="row2">
-        <div class="field"><label>Email</label><input id="f-email" type="text" placeholder="jordan@email.com"></div>
-        <div class="field"><label>Phone</label><input id="f-phone" type="text" placeholder="+91 98765 43210"></div>
+        <div class="field"><label>Email</label><input id="f-email" type="text" autocomplete="off"></div>
+        <div class="field"><label>Phone</label><input id="f-phone" type="text" autocomplete="off"></div>
       </div>
       <div class="row2">
-        <div class="field"><label>Location</label><input id="f-location" type="text" placeholder="Bengaluru, India"></div>
-        <div class="field"><label>LinkedIn / Website</label><input id="f-link" type="text" placeholder="linkedin.com/in/jordan"></div>
+        <div class="field"><label>Location</label><input id="f-location" type="text" autocomplete="off"></div>
+        <div class="field"><label>LinkedIn / Website</label><input id="f-link" type="text" autocomplete="off"></div>
       </div>
 
       <div class="upload-existing">
@@ -928,7 +928,7 @@
       <button class="add-btn" id="ai-summary-btn" type="button">✨ Generate summary with AI</button>
       <div class="hint" id="ai-summary-status"></div>
       <div class="field">
-        <textarea id="f-summary" rows="5" placeholder="2-3 sentence summary of your experience and what you're looking for."></textarea>
+        <textarea id="f-summary" rows="5"></textarea>
       </div>
     </div>
 
@@ -947,7 +947,7 @@
     <div class="section" data-step="4">
       <h2>Skills</h2>
       <div class="field">
-        <input id="f-skills" type="text" placeholder="JavaScript, React, Node.js, SQL">
+        <input id="f-skills" type="text">
         <div class="hint">Comma-separated</div>
       </div>
     </div>
