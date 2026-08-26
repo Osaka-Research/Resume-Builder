@@ -767,6 +767,29 @@
       return;
     }
 
+    // AI-refine a vague/colloquial query ("offshore") into the specific job
+    // title/keyword phrase recruiters actually post under, since Indeed/
+    // LinkedIn (via jobspy) just keyword-match the raw search term as-is.
+    // Best-effort and time-boxed -- any failure or timeout just searches with
+    // what the person typed, never blocks the search on this.
+    let refinedFrom = null;
+    $("#jobs-status").textContent = "Refining search…";
+    try {
+      const rres = await fetch(JOBS_API + "/api/refine-search-term", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ search_term: term, location: locationForApi }),
+        signal: AbortSignal.timeout(6000),
+      });
+      if (rres.ok) {
+        const rdata = await rres.json();
+        if (rdata.changed && rdata.refined) {
+          refinedFrom = term;
+          term = rdata.refined;
+        }
+      }
+    } catch (err) { /* AI refinement unavailable -- search with the original term */ }
+
     $("#jobs-status").textContent = `Searching jobs posted in ${hoursLabel}…`;
     $("#jobs-results").innerHTML = "";
     $("#jobs-loader").style.display = "flex";
@@ -786,7 +809,8 @@
       const stillWaiting = requestedSites.some(s => siteCounts[s] === null);
       const note = stillWaiting ? " LinkedIn is usually the slowest — can take up to a minute, keep this open." : "";
       const correctionNote = correctedFrom ? ` (auto-corrected from "${correctedFrom}")` : "";
-      $("#jobs-status").textContent = `${total} result${total === 1 ? "" : "s"} posted in ${hoursLabel} so far for "${term}"${location ? " in " + location : ""}.${correctionNote} (${breakdown})${note}`;
+      const refinedNote = refinedFrom ? ` (AI-refined from "${refinedFrom}" for more relevant results)` : "";
+      $("#jobs-status").textContent = `${total} result${total === 1 ? "" : "s"} posted in ${hoursLabel} so far for "${term}"${location ? " in " + location : ""}.${correctionNote}${refinedNote} (${breakdown})${note}`;
       $("#jobs-loader").style.display = stillWaiting ? "flex" : "none";
       $("#download-csv-btn").style.display = (!stillWaiting && currentSearchJobs.length) ? "" : "none";
     };

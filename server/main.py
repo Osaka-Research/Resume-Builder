@@ -75,6 +75,47 @@ async def health() -> dict:
     }
 
 
+async def _minimax_chat(system_prompt: str, user_prompt: str, timeout: float = 30) -> str:
+    """Shared MiniMax chat-completion call. Raises HTTPException on any failure
+    (unreachable, API error, unexpected response shape) so callers can just
+    await this and not repeat the same error handling."""
+    if not MINIMAX_API_KEY:
+        raise HTTPException(status_code=503, detail="AI feature is not configured (missing MINIMAX_API_KEY).")
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(
+                MINIMAX_API_URL,
+                headers={
+                    "Authorization": f"Bearer {MINIMAX_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": MINIMAX_MODEL,
+                    "messages": [
+                        {"role": "system", "name": "assistant", "content": system_prompt},
+                        {"role": "user", "name": "user", "content": user_prompt},
+                    ],
+                },
+            )
+        resp.raise_for_status()
+        data = resp.json()
+    except httpx.HTTPError:
+        log.exception("minimax request failed")
+        raise HTTPException(status_code=502, detail="AI service is unreachable right now.")
+
+    base_resp = data.get("base_resp") or {}
+    if base_resp.get("status_code", 0) not in (0, None):
+        log.error("minimax error: %s", base_resp)
+        raise HTTPException(status_code=502, detail=base_resp.get("status_msg") or "AI service error.")
+
+    try:
+        return data["choices"][0]["message"]["content"].strip()
+    except (KeyError, IndexError, AttributeError):
+        log.error("unexpected minimax response shape: %s", data)
+        raise HTTPException(status_code=502, detail="AI service returned an unexpected response.")
+
+
 class GenerateSummaryRequest(BaseModel):
     jd: str = Field(..., min_length=1, max_length=8000, description="job description text")
     name: str = Field("", max_length=200)
@@ -84,9 +125,6 @@ class GenerateSummaryRequest(BaseModel):
 
 @app.post("/api/generate-summary")
 async def generate_summary(req: GenerateSummaryRequest) -> dict:
-    if not MINIMAX_API_KEY:
-        raise HTTPException(status_code=503, detail="AI summary generation is not configured (missing MINIMAX_API_KEY).")
-
     profile_bits = []
     if req.headline:
         profile_bits.append(f"Target role: {req.headline}")
@@ -102,41 +140,46 @@ async def generate_summary(req: GenerateSummaryRequest) -> dict:
         f"Candidate profile:\n{profile}\n\n"
         f"Job description:\n{req.jd.strip()[:6000]}"
     )
-
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                MINIMAX_API_URL,
-                headers={
-                    "Authorization": f"Bearer {MINIMAX_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": MINIMAX_MODEL,
-                    "messages": [
-                        {"role": "system", "name": "assistant", "content": "You are a concise, expert resume writer."},
-                        {"role": "user", "name": "user", "content": prompt},
-                    ],
-                },
-            )
-        resp.raise_for_status()
-        data = resp.json()
-    except httpx.HTTPError:
-        log.exception("minimax request failed")
-        raise HTTPException(status_code=502, detail="AI summary service is unreachable right now.")
-
-    base_resp = data.get("base_resp") or {}
-    if base_resp.get("status_code", 0) not in (0, None):
-        log.error("minimax error: %s", base_resp)
-        raise HTTPException(status_code=502, detail=base_resp.get("status_msg") or "AI summary service error.")
-
-    try:
-        summary = data["choices"][0]["message"]["content"].strip()
-    except (KeyError, IndexError, AttributeError):
-        log.error("unexpected minimax response shape: %s", data)
-        raise HTTPException(status_code=502, detail="AI summary service returned an unexpected response.")
-
+    summary = await _minimax_chat("You are a concise, expert resume writer.", prompt)
     return {"summary": summary}
+
+
+class RefineSearchRequest(BaseModel):
+    search_term: str = Field(..., min_length=1, max_length=200)
+    location: str = Field("", max_length=200)
+
+
+@app.post("/api/refine-search-term")
+async def refine_search_term(req: RefineSearchRequest) -> dict:
+    """Job boards (Indeed/LinkedIn/etc, via jobspy) match on the raw keyword
+    string as-is -- a vague or colloquial query like "offshore" returns
+    whatever loosely matches, not what the person actually meant. This asks
+    the model to rewrite it into the specific job title/keyword phrase a
+    recruiter would actually post under, so the underlying keyword search
+    itself is more targeted. Best-effort: on any failure, callers should just
+    fall back to the original term rather than blocking the search."""
+    prompt = (
+        "Rewrite the job search query below into the single most effective search phrase "
+        "for job boards like Indeed and LinkedIn -- the specific job title or keyword phrase "
+        "a recruiter would actually use in a posting, so the search returns relevant results "
+        "instead of loosely-matched noise. If it's already a clear, specific job title or "
+        "keyword phrase, return it completely unchanged. Don't narrow the field/domain implied "
+        "by the query, just make the wording match how real job postings are titled. "
+        "Return ONLY the rewritten phrase, no explanation, no quotes, no punctuation around it.\n\n"
+        f"Query: {req.search_term.strip()}\n"
+        f"Location (if given): {req.location.strip() or 'not specified'}"
+    )
+    refined = await _minimax_chat(
+        "You are an expert technical recruiter who knows how job titles and keywords are "
+        "actually phrased across industries.",
+        prompt,
+        timeout=12,
+    )
+    refined = refined.strip().strip('"')
+    return {
+        "refined": refined or req.search_term,
+        "changed": bool(refined) and refined.lower() != req.search_term.strip().lower(),
+    }
 
 
 @app.post("/api/scrape")
