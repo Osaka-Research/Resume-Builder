@@ -64,73 +64,38 @@
 
   $("#download-resume-btn").addEventListener("click", () => window.print());
 
+  function updateApplyButton() {
+    $("#apply-job-btn").style.display = (currentJob && currentJob.url) ? "" : "none";
+  }
+
   $("#clear-btn").addEventListener("click", () => {
     if (!confirm("Clear all fields? This can't be undone.")) return;
-    document.querySelectorAll(".form-panel input, .form-panel textarea").forEach(el => {
+    document.querySelectorAll("#resume-editor input, #resume-editor textarea").forEach(el => {
       el.value = "";
       el.classList.remove("mock-value");
     });
     document.getElementById("experience-list").innerHTML = "";
     document.getElementById("education-list").innerHTML = "";
     currentJob = null;
+    updateApplyButton();
     render();
-    showWizardStep(0);
-    exitFinalPreview();
   });
 
-  // ── Wizard: one section of the form visible at a time, instead of the
-  // whole thing crammed on screen. Sample data pre-fills every field so
-  // nothing starts blank; the first click into a still-unedited field
-  // selects its text so typing immediately replaces it. ──
-
-  const wizardSections = () => Array.from(document.querySelectorAll("#form-panel > .section"));
-
-  // Step 1 (Personal Info) has to be filled for real before moving on --
-  // otherwise a resume gets built around whatever sample name/email was
-  // still sitting there unedited.
-  const STEP1_FIELD_IDS = ["f-name", "f-headline", "f-email", "f-phone", "f-location", "f-link"];
-  function step1Complete() {
-    return STEP1_FIELD_IDS.every(id => {
-      const el = $("#" + id);
-      return !el.classList.contains("mock-value") && el.value.trim();
-    });
-  }
-  function updateNextButtonState() {
-    $("#wizard-next-btn").disabled = wizardStep === 0 && !step1Complete();
-  }
-
-  function showWizardStep(i) {
-    const sections = wizardSections();
-    wizardStep = Math.max(0, Math.min(i, sections.length - 1));
-    sections.forEach((s, idx) => { s.style.display = idx === wizardStep ? "" : "none"; });
-    $("#wizard-progress").textContent = `Step ${wizardStep + 1} of ${sections.length}`;
-    $("#wizard-back-btn").style.visibility = wizardStep === 0 ? "hidden" : "visible";
-    $("#wizard-next-btn").textContent = wizardStep === sections.length - 1 ? "Finish → View Resume" : "Next →";
-    updateNextButtonState();
-  }
-  let wizardStep = 0;
-
-  $("#wizard-next-btn").addEventListener("click", () => {
-    if ($("#wizard-next-btn").disabled) return;
-    const sections = wizardSections();
-    if (wizardStep < sections.length - 1) showWizardStep(wizardStep + 1);
-    else enterFinalPreview();
+  $("#close-editor-btn").addEventListener("click", () => {
+    $("#build-view").style.display = "none";
   });
-  $("#wizard-back-btn").addEventListener("click", () => showWizardStep(wizardStep - 1));
 
-  function enterFinalPreview() {
-    $("#form-panel").style.display = "none";
-    $("#preview-wrap").style.display = "flex";
-    $("#apply-job-btn").style.display = (currentJob && currentJob.url) ? "" : "none";
-  }
-  function exitFinalPreview() {
-    $("#preview-wrap").style.display = "none";
-    $("#form-panel").style.display = "";
-  }
-  $("#edit-resume-btn").addEventListener("click", () => {
-    exitFinalPreview();
-    showWizardStep(0);
-  });
+  // First focus on a sample-filled field clears the placeholder text so
+  // it's a clean slate to type into, not something to select-and-overtype.
+  // Capture phase because focus doesn't bubble.
+  document.getElementById("build-view").addEventListener("focus", (e) => {
+    const el = e.target;
+    if (el.classList && el.classList.contains("mock-value")) {
+      el.value = "";
+      el.classList.remove("mock-value");
+      render();
+    }
+  }, true);
 
   function setSubmitStatus(message, ok) {
     const el = $("#submit-status");
@@ -157,18 +122,6 @@
       setSubmitStatus("Couldn't submit: " + (err.message || "network error") + ".", false);
     }
   });
-
-  // First focus on a sample-filled field clears the placeholder text so
-  // it's a clean slate to type into, not something to select-and-overtype.
-  // Capture phase because focus doesn't bubble.
-  document.getElementById("form-panel").addEventListener("focus", (e) => {
-    const el = e.target;
-    if (el.classList && el.classList.contains("mock-value")) {
-      el.value = "";
-      el.classList.remove("mock-value");
-      render();
-    }
-  }, true);
 
   // ── Upload an existing resume: extract its text and drop it into Summary.
   // No reliable way to auto-sort arbitrary resume text into name/experience/
@@ -299,7 +252,7 @@
       }
 
       const summaryEl = $("#f-summary");
-      const note = "--- Extracted from " + file.name + " -- review and copy details into the right steps below ---\n\n";
+      const note = "--- Extracted from " + file.name + " -- review and copy details into the right sections below ---\n\n";
       summaryEl.value = note + text.slice(0, 4000);
       summaryEl.classList.remove("mock-value");
 
@@ -312,9 +265,9 @@
 
       render();
       const filledNote = filled.length
-        ? ` Also guessed ${filled.join(", ")} in Personal Info (Step 1) -- please double-check.`
+        ? ` Also guessed ${filled.join(", ")} above -- please double-check.`
         : "";
-      setUploadStatus("Extracted " + file.name + " -- available in the Summary step (Step 2) for you to review." + filledNote, true);
+      setUploadStatus("Extracted " + file.name + " -- dropped into Summary above for you to review." + filledNote, true);
     } catch (err) {
       setUploadStatus(err.message || "Couldn't extract text from that file.", false);
     }
@@ -443,13 +396,10 @@
     };
     saveResumeData(dataOut);
     if (!suppressDraftSave) scheduleDraftSave(dataOut);
-    updateNextButtonState();
   }
 
-  // ── Persistence: everything typed into the wizard auto-saves to this
-  // browser's localStorage on every change, and survives reload/reopen.
-  // Export/Import give a copy you fully control (a real file, not tied to
-  // this browser/device). ──
+  // ── Persistence: everything typed into the resume auto-saves to this
+  // browser's localStorage on every change, and survives reload/reopen. ──
 
   const RESUME_DATA_KEY = "resume_builder_data_v1";
 
@@ -463,8 +413,8 @@
     try { return JSON.parse(raw); } catch { return null; }
   }
 
-  // ── Auto-save to the backend as the visitor types (disclosed at the top
-  // of the wizard, before the first field). Debounced so it's one request
+  // ── Auto-save to the backend as the visitor types (disclosed in the
+  // draft-notice below the resume). Debounced so it's one request
   // per pause in typing, not one per keystroke. Keyed by a per-browser
   // session id so repeated saves update the same row instead of piling up
   // duplicates. Clicking "Submit to talent pool" later marks this same row
@@ -546,20 +496,16 @@
   let lastSearchTerm = "";
   let currentJob = null; // job the resume-in-progress is targeting (for the Apply button)
 
-  function showBuildView() {
-    $("#build-view").style.display = "";
-    $("#jobs-view").style.display = "none";
-    $("#job-detail-view").style.display = "none";
-    exitFinalPreview();
-    showWizardStep(0);
+  // Mounts the (single, shared) resume editor right after whichever button
+  // triggered it -- a job card in the results list, or the detail page's
+  // actions row -- instead of navigating to a separate page.
+  function showBuildView(anchorEl) {
+    const bv = $("#build-view");
+    if (anchorEl) anchorEl.insertAdjacentElement("afterend", bv);
+    bv.style.display = "";
+    render();
+    bv.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
-
-  function showJobsView() {
-    $("#jobs-view").style.display = "";
-    $("#build-view").style.display = "none";
-  }
-
-  $("#back-to-jobs-btn").addEventListener("click", showJobsView);
 
   // ── Jobs search ──
 
@@ -644,7 +590,7 @@
       j.title === job.title && j.company === job.company && j.url === job.url);
     if (el.dataset.clickAction === "generate_resume") {
       currentJob = job;
-      generateResumeForJob(job.title, job.company, full ? full.description : "");
+      generateResumeForJob(job.title, job.company, full ? full.description : "", el.closest(".job-card"));
     } else if (el.dataset.clickAction === "share_job") {
       shareJob(job, el);
     } else if (el.dataset.clickAction === "view_job") {
@@ -655,8 +601,11 @@
   // ── Job detail view: reconstructs the posting in-app instead of sending
   // the person to the source site. Only "Open" / "Apply" leave the app. ──
 
+  let currentJobDescription = "";
+
   function showJobDetailView(job, description) {
     currentJob = job;
+    currentJobDescription = description || "";
     $("#jd-title").textContent = job.title;
     $("#jd-company").textContent = job.company || "";
     $("#jd-meta").textContent = [SITE_LABELS[job.site] || job.site].filter(Boolean).join(" · ");
@@ -676,7 +625,7 @@
 
   $("#jd-generate-btn").addEventListener("click", () => {
     logJobClick("generate_resume", currentJob);
-    generateResumeForJob(currentJob.title, currentJob.company, $("#jd-description").textContent);
+    generateResumeForJob(currentJob.title, currentJob.company, currentJobDescription, $(".job-detail-actions"));
   });
 
   $("#apply-job-btn").addEventListener("click", () => {
@@ -852,6 +801,15 @@
     } catch (err) { /* AI refinement unavailable -- search with the original term */ }
 
     $("#jobs-status").textContent = `Searching jobs posted in ${hoursLabel}…`;
+    // The resume editor may currently be mounted under a card from the
+    // previous search -- rescue it before wiping the results, or every
+    // subsequent $("#...") lookup into it (which are just querySelector
+    // calls scoped to the document) starts returning null.
+    const bv = $("#build-view");
+    if (bv && $("#jobs-results").contains(bv)) {
+      bv.style.display = "none";
+      document.body.appendChild(bv);
+    }
     $("#jobs-results").innerHTML = "";
     $("#jobs-loader").style.display = "flex";
     $("#download-csv-btn").style.display = "none";
@@ -934,21 +892,23 @@
     }
   }
 
-  function generateResumeForJob(title, company, description) {
+  function generateResumeForJob(title, company, description, anchorEl) {
     $("#f-headline").value = title;
+    $("#f-headline").classList.remove("mock-value");
     // Don't clobber a summary the person already wrote -- only seed one if it's empty.
     const summaryEl = $("#f-summary");
     if (!summaryEl.value.trim()) {
       summaryEl.value = company
         ? `Aiming for the ${title} role at ${company}.`
         : `Aiming for a ${title} role.`;
+      summaryEl.classList.remove("mock-value");
     }
     if (description) $("#f-jd").value = description;
-    render();
-    showBuildView();
+    updateApplyButton();
+    showBuildView(anchorEl);
   }
 
-  // ── AI summary generation (step 2), from pasted/seeded JD ──
+  // ── AI summary generation, from pasted/seeded JD ──
 
   $("#ai-summary-btn").addEventListener("click", async () => {
     const jd = $("#f-jd").value.trim();
