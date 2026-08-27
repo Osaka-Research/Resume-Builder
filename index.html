@@ -784,12 +784,20 @@
   }
 
   .job-detail-desc {
-    white-space: pre-wrap;
     line-height: 1.6;
     font-size: 14px;
     color: #333;
     margin: 20px 0 28px;
   }
+
+  .job-detail-desc p { margin: 0 0 12px; }
+
+  .job-detail-desc .jd-list {
+    margin: 0 0 12px;
+    padding-left: 20px;
+  }
+
+  .job-detail-desc .jd-list li { margin-bottom: 4px; }
 
   .job-detail-actions {
     display: flex;
@@ -1097,7 +1105,7 @@
      on a fresh page load. The update-check script below (for tabs already
      open when a deploy happens) is separate and doesn't rely on this. -->
 <script src="dictionary.js?v=35c2a6a0"></script>
-<script src="app.js?v=908b3ff"></script>
+<script src="app.js?v=f663418"></script>
 <script>
   // ── Update checker ──────────────────────────────────────────────────
   // A silent auto-reload here could wipe someone's half-filled resume

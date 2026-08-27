@@ -7,11 +7,27 @@
     }[c]));
   }
 
-  // Job postings often paste in with **Label:** markers instead of real
-  // structure -- turn those into little tags instead of showing raw asterisks.
+  // Job postings often paste in with markdown-ish markers instead of real
+  // structure: **Label:** for section headers, "* " lines for bullets.
+  // Turn those into tags/lists instead of showing raw asterisks.
   function formatJobDescription(text) {
-    return escapeHtml(text).replace(/\*\*(.+?)\*\*/g, (_, label) =>
+    const withTags = escapeHtml(text).replace(/\*\*(.+?)\*\*/g, (_, label) =>
       `<span class="jd-tag">${label.replace(/:\s*$/, "")}</span>`);
+    let html = "";
+    let inList = false;
+    for (const rawLine of withTags.split("\n")) {
+      const line = rawLine.trim();
+      const bullet = line.match(/^\*\s+(.*)/);
+      if (bullet) {
+        if (!inList) { html += `<ul class="jd-list">`; inList = true; }
+        html += `<li>${bullet[1]}</li>`;
+      } else {
+        if (inList) { html += "</ul>"; inList = false; }
+        if (line) html += `<p>${line}</p>`;
+      }
+    }
+    if (inList) html += "</ul>";
+    return html;
   }
 
   // ── Repeatable entry lists ──
