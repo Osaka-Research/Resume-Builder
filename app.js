@@ -7,6 +7,13 @@
     }[c]));
   }
 
+  // Job postings often paste in with **Label:** markers instead of real
+  // structure -- turn those into little tags instead of showing raw asterisks.
+  function formatJobDescription(text) {
+    return escapeHtml(text).replace(/\*\*(.+?)\*\*/g, (_, label) =>
+      `<span class="jd-tag">${label.replace(/:\s*$/, "")}</span>`);
+  }
+
   // ── Repeatable entry lists ──
 
   function addEntry(listId, templateId, data, isMock) {
@@ -566,7 +573,7 @@
             ${j.url ? `<a data-click-action="open_link" ${dAttrs} href="${dUrl}" target="_blank" rel="noopener">Open</a>` : ""}
           </div>
         </div>
-        ${j.description ? `<div class="job-desc">${escapeHtml(j.description)}</div>` : ""}
+        ${j.description ? `<div class="job-desc">${formatJobDescription(j.description)}</div>` : ""}
       </div>
     `;
   }
@@ -637,7 +644,9 @@
     $("#jd-title").textContent = job.title;
     $("#jd-company").textContent = job.company || "";
     $("#jd-meta").textContent = [SITE_LABELS[job.site] || job.site].filter(Boolean).join(" · ");
-    $("#jd-description").textContent = description || "No description available for this listing.";
+    $("#jd-description").innerHTML = description
+      ? formatJobDescription(description)
+      : "No description available for this listing.";
     $("#jobs-view").style.display = "none";
     $("#job-detail-view").style.display = "";
   }

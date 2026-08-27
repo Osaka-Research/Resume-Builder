@@ -847,6 +847,23 @@
     overflow: hidden;
   }
 
+  .jd-tag {
+    display: block;
+    width: fit-content;
+    background: var(--accent);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 4px;
+    margin: 10px 0 4px;
+  }
+
+  .job-desc .jd-tag { margin: 6px 0 2px; }
+  .job-desc .jd-tag:first-child { margin-top: 0; }
+
   .jobs-loader {
     display: flex;
     align-items: center;
@@ -1083,7 +1100,7 @@
      on a fresh page load. The update-check script below (for tabs already
      open when a deploy happens) is separate and doesn't rely on this. -->
 <script src="dictionary.js?v=35c2a6a0"></script>
-<script src="app.js?v=1a6b3af"></script>
+<script src="app.js?v=a850222"></script>
 <script>
   // ── Update checker ──────────────────────────────────────────────────
   // A silent auto-reload here could wipe someone's half-filled resume
