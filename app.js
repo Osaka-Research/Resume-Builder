@@ -49,6 +49,7 @@
     });
     document.getElementById("experience-list").innerHTML = "";
     document.getElementById("education-list").innerHTML = "";
+    currentJob = null;
     render();
     showWizardStep(0);
     exitFinalPreview();
@@ -97,6 +98,7 @@
   function enterFinalPreview() {
     $("#form-panel").style.display = "none";
     $("#preview-wrap").style.display = "flex";
+    $("#apply-job-btn").style.display = (currentJob && currentJob.url) ? "" : "none";
   }
   function exitFinalPreview() {
     $("#preview-wrap").style.display = "none";
@@ -519,10 +521,12 @@
   let currentSearchJobs = [];
   let currentSearchLabel = "jobs";
   let lastSearchTerm = "";
+  let currentJob = null; // job the resume-in-progress is targeting (for the Apply button)
 
   function showBuildView() {
     $("#build-view").style.display = "";
     $("#jobs-view").style.display = "none";
+    $("#job-detail-view").style.display = "none";
     exitFinalPreview();
     showWizardStep(0);
   }
@@ -552,9 +556,7 @@
       <div class="job-card">
         <div class="job-card-top">
           <div>
-            ${j.url
-              ? `<a class="job-title" data-click-action="open_title" ${dAttrs} href="${dUrl}" target="_blank" rel="noopener">${escapeHtml(j.title)}</a>`
-              : `<div class="job-title">${escapeHtml(j.title)}</div>`}
+            <button type="button" class="job-title" data-click-action="view_job" ${dAttrs}>${escapeHtml(j.title)}</button>
             <div class="job-company">${escapeHtml(j.company)}${j.location ? " — " + escapeHtml(j.location) : ""}</div>
             <div class="job-meta">${[SITE_LABELS[j.site] || j.site, j.job_type, j.is_remote ? "Remote" : null, j.date_posted].filter(Boolean).map(escapeHtml).join(" · ")}</div>
           </div>
@@ -615,13 +617,47 @@
       url: el.dataset.jobUrl || "",
     };
     logJobClick(el.dataset.clickAction, job);
+    const full = currentSearchJobs.find(j =>
+      j.title === job.title && j.company === job.company && j.url === job.url);
     if (el.dataset.clickAction === "generate_resume") {
-      const full = currentSearchJobs.find(j =>
-        j.title === job.title && j.company === job.company && j.url === job.url);
+      currentJob = job;
       generateResumeForJob(job.title, job.company, full ? full.description : "");
     } else if (el.dataset.clickAction === "share_job") {
       shareJob(job, el);
+    } else if (el.dataset.clickAction === "view_job") {
+      showJobDetailView(job, full ? full.description : "");
     }
+  });
+
+  // ── Job detail view: reconstructs the posting in-app instead of sending
+  // the person to the source site. Only "Open" / "Apply" leave the app. ──
+
+  function showJobDetailView(job, description) {
+    currentJob = job;
+    $("#jd-title").textContent = job.title;
+    $("#jd-company").textContent = job.company || "";
+    $("#jd-meta").textContent = [SITE_LABELS[job.site] || job.site].filter(Boolean).join(" · ");
+    $("#jd-description").textContent = description || "No description available for this listing.";
+    $("#jobs-view").style.display = "none";
+    $("#job-detail-view").style.display = "";
+  }
+
+  function hideJobDetailView() {
+    $("#job-detail-view").style.display = "none";
+    $("#jobs-view").style.display = "";
+  }
+
+  $("#back-to-results-btn").addEventListener("click", hideJobDetailView);
+
+  $("#jd-generate-btn").addEventListener("click", () => {
+    logJobClick("generate_resume", currentJob);
+    generateResumeForJob(currentJob.title, currentJob.company, $("#jd-description").textContent);
+  });
+
+  $("#apply-job-btn").addEventListener("click", () => {
+    if (!currentJob || !currentJob.url) return;
+    logJobClick("apply_click", currentJob);
+    window.open(currentJob.url, "_blank", "noopener");
   });
 
   // ── Custom country dropdown ──

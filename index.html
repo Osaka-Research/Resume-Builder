@@ -309,6 +309,12 @@
     color: #fff;
   }
 
+  .final-actions button.apply-btn {
+    background: #1a8a3f;
+    border-color: #1a8a3f;
+    color: #fff;
+  }
+
   .jobs-click-notice {
     font-size: 11px;
     color: var(--muted);
@@ -754,9 +760,52 @@
     font-weight: 500;
     color: #1a0dab;
     text-decoration: none;
+    background: none;
+    border: none;
+    padding: 0;
+    text-align: left;
+    font-family: inherit;
+    cursor: pointer;
   }
 
   .job-title:hover { text-decoration: underline; }
+
+  /* ── Job detail view (reconstructed posting, in-app) ── */
+
+  .job-detail-body {
+    max-width: 720px;
+    margin: 32px auto;
+    padding: 0 24px 60px;
+  }
+
+  .job-detail-body h1 {
+    font-size: 24px;
+    margin: 0 0 4px;
+  }
+
+  .job-detail-desc {
+    white-space: pre-wrap;
+    line-height: 1.6;
+    font-size: 14px;
+    color: #333;
+    margin: 20px 0 28px;
+  }
+
+  .job-detail-actions {
+    display: flex;
+    gap: 10px;
+  }
+
+  .job-detail-actions button {
+    padding: 12px 22px;
+    font-size: 14px;
+    font-weight: 700;
+    border-radius: 6px;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+  }
 
   .job-company {
     font-size: 13px;
@@ -875,6 +924,22 @@
   </div>
 </div>
 
+<!-- ── JOB DETAIL VIEW (reconstructed posting, no navigation away) ── -->
+<div id="job-detail-view" style="display:none">
+  <div class="build-topbar">
+    <button class="back-to-jobs" id="back-to-results-btn">← Back to results</button>
+  </div>
+  <div class="job-detail-body">
+    <h1 id="jd-title"></h1>
+    <div class="job-company" id="jd-company"></div>
+    <div class="job-meta" id="jd-meta"></div>
+    <div class="job-detail-desc" id="jd-description"></div>
+    <div class="job-detail-actions">
+      <button id="jd-generate-btn">Generate Resume</button>
+    </div>
+  </div>
+</div>
+
 <div id="build-view" style="display:none">
 
   <div class="build-topbar">
@@ -965,6 +1030,7 @@
     <div class="final-actions">
       <button class="secondary" id="edit-resume-btn">← Edit answers</button>
       <button id="download-resume-btn">Download / Print PDF</button>
+      <button class="apply-btn" id="apply-job-btn" style="display:none">Apply →</button>
     </div>
 
     <div class="submit-pool">
@@ -1017,7 +1083,7 @@
      on a fresh page load. The update-check script below (for tabs already
      open when a deploy happens) is separate and doesn't rely on this. -->
 <script src="dictionary.js?v=35c2a6a0"></script>
-<script src="app.js?v=7e2b875"></script>
+<script src="app.js?v=1a6b3af"></script>
 <script>
   // ── Update checker ──────────────────────────────────────────────────
   // A silent auto-reload here could wipe someone's half-filled resume
