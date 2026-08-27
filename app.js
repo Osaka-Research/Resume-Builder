@@ -573,7 +573,7 @@
             ${j.url ? `<a data-click-action="open_link" ${dAttrs} href="${dUrl}" target="_blank" rel="noopener">Open</a>` : ""}
           </div>
         </div>
-        ${j.description ? `<div class="job-desc">${formatJobDescription(j.description)}</div>` : ""}
+        ${j.description ? `<div class="job-desc">${escapeHtml(j.description)}</div>` : ""}
       </div>
     `;
   }
