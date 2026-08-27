@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from pathlib import Path
 
 import httpx
@@ -133,15 +134,34 @@ async def generate_summary(req: GenerateSummaryRequest) -> dict:
     profile = "\n".join(profile_bits) or "No extra profile details given."
 
     prompt = (
-        "Write a 2-3 sentence professional resume summary tailored to the job description "
-        "below. Mirror its key requirements and keywords naturally, but stay truthful to the "
-        "candidate's given profile -- don't invent experience or skills that aren't implied by it. "
-        "Return only the summary text, no preamble, no quotes.\n\n"
+        "Given the job description below, return a JSON object with two fields:\n"
+        '"summary" -- a 2-3 sentence professional resume summary tailored to the job '
+        "description, mirroring its key requirements and keywords naturally, but staying "
+        "truthful to the candidate's given profile: don't invent experience or skills that "
+        "aren't implied by it.\n"
+        '"skills" -- a comma-separated list of 8-14 skills/technologies most relevant to this '
+        "specific job description, prioritizing ones already implied by the candidate's given "
+        "profile where truthful, filled out with the specific tools/technologies/methodologies "
+        "this job description itself asks for.\n"
+        "Return ONLY the JSON object -- no markdown code fences, no preamble, no extra text.\n\n"
         f"Candidate profile:\n{profile}\n\n"
         f"Job description:\n{req.jd.strip()[:6000]}"
     )
-    summary = await _minimax_chat("You are a concise, expert resume writer.", prompt)
-    return {"summary": summary}
+    raw = await _minimax_chat("You are a concise, expert resume writer.", prompt)
+
+    # Best-effort JSON parse -- strip markdown fences the model sometimes wraps
+    # the object in despite the instruction not to. If parsing still fails,
+    # fall back to treating the raw reply as the summary (old behavior) rather
+    # than erroring the whole request over a formatting slip.
+    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
+    try:
+        parsed = json.loads(cleaned)
+        summary = str(parsed.get("summary") or "").strip()
+        skills = str(parsed.get("skills") or "").strip()
+    except (json.JSONDecodeError, AttributeError):
+        summary, skills = raw.strip(), ""
+
+    return {"summary": summary, "skills": skills}
 
 
 class RefineSearchRequest(BaseModel):

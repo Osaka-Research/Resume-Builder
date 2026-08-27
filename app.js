@@ -935,13 +935,18 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Request failed");
       $("#f-summary").value = data.summary || "";
+      $("#f-summary").classList.remove("mock-value");
+      if (data.skills) {
+        $("#f-skills").value = data.skills;
+        $("#f-skills").classList.remove("mock-value");
+      }
       render();
       statusEl.textContent = "";
     } catch (err) {
       statusEl.textContent = "Couldn't generate a summary right now. Try again in a moment.";
     } finally {
       btn.disabled = false;
-      btn.textContent = "✨ Generate summary with AI";
+      btn.textContent = "✨ Generate summary & skills with AI";
     }
   });
 
