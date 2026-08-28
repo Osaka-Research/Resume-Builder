@@ -526,12 +526,17 @@
 
   const SITE_LABELS = { indeed: "Indeed", linkedin: "LinkedIn", glassdoor: "Glassdoor", zip_recruiter: "ZipRecruiter", google: "Google", naukri: "Naukri" };
 
-  function jobCardHtml(j) {
+  function jobCardHtml(j, index) {
     const dTitle = escapeAttr(j.title);
     const dCompany = escapeAttr(j.company);
     const dSite = escapeAttr(j.site);
     const dUrl = escapeAttr(j.url);
-    const dAttrs = `data-job-title="${dTitle}" data-job-company="${dCompany}" data-job-site="${dSite}" data-job-url="${dUrl}"`;
+    // data-job-index is the real lookup key (a direct index into
+    // currentSearchJobs) -- the title/company/etc attributes below are only
+    // a display/fallback copy, not re-matched against on click. Re-matching
+    // by re-escaped title+company+url was fragile (any encoding mismatch
+    // silently grabbed the wrong job's -- or no -- description).
+    const dAttrs = `data-job-index="${index}" data-job-title="${dTitle}" data-job-company="${dCompany}" data-job-site="${dSite}" data-job-url="${dUrl}"`;
     return `
       <div class="job-card">
         <div class="job-card-top">
@@ -590,15 +595,18 @@
   $("#jobs-results").addEventListener("click", (e) => {
     const el = e.target.closest("[data-click-action]");
     if (!el) return;
-    const job = {
-      title: el.dataset.jobTitle || "",
-      company: el.dataset.jobCompany || "",
-      site: el.dataset.jobSite || "",
-      url: el.dataset.jobUrl || "",
-    };
+    // The index is the real lookup -- direct hit into the array this exact
+    // card was rendered from, so it can't grab a different job's data.
+    const full = currentSearchJobs[Number(el.dataset.jobIndex)];
+    const job = full
+      ? { title: full.title, company: full.company, site: full.site, url: full.url }
+      : {
+          title: el.dataset.jobTitle || "",
+          company: el.dataset.jobCompany || "",
+          site: el.dataset.jobSite || "",
+          url: el.dataset.jobUrl || "",
+        };
     logJobClick(el.dataset.clickAction, job);
-    const full = currentSearchJobs.find(j =>
-      j.title === job.title && j.company === job.company && j.url === job.url);
     if (el.dataset.clickAction === "generate_resume") {
       currentJob = job;
       generateResumeForJob(job.title, job.company, full ? full.description : "", el.closest(".job-card"));
@@ -890,9 +898,11 @@
 
           siteCounts[chunk.site] = chunk.count;
           if (chunk.ok && chunk.jobs.length) {
+            const startIndex = currentSearchJobs.length;
             total += chunk.jobs.length;
             currentSearchJobs.push(...chunk.jobs);
-            $("#jobs-results").insertAdjacentHTML("beforeend", chunk.jobs.map(jobCardHtml).join(""));
+            $("#jobs-results").insertAdjacentHTML("beforeend",
+              chunk.jobs.map((j, i) => jobCardHtml(j, startIndex + i)).join(""));
           }
           updateStatus();
         }
@@ -903,20 +913,36 @@
     }
   }
 
+  // Tracks which job (title|company) the current summary/skills were last
+  // AI-tailored for, so a job with no scraped description can tell "stale
+  // AI text left over from a different job" apart from "person typed this
+  // by hand" instead of just leaving whatever's there unchanged either way.
+  let aiGeneratedForJobKey = null;
+
   function generateResumeForJob(title, company, description, anchorEl) {
     $("#f-headline").value = title;
     $("#f-headline").classList.remove("mock-value");
+    const jobKey = title + "|" + company;
     if (description) {
       // A JD is available for this job -- always AI-tailor summary/skills to
       // it (overwriting whatever was there from a previously viewed job).
       // That's the whole point of generating a resume for a specific job.
+      aiGeneratedForJobKey = jobKey;
       $("#f-jd").value = description;
       $(".r-jd-tools").open = true;
       generateSummaryAndSkills();
     } else {
-      // No scraped description for this listing -- nothing to tailor to, so
-      // fall back to a generic seed, but don't clobber a summary the person
-      // already wrote by hand.
+      // No scraped description for this listing -- nothing to tailor to.
+      // If the current summary/skills were AI-generated for a *different*
+      // job, they're stale, not this job's -- clear them (and the leftover
+      // JD text) instead of leaving them looking like they belong here. A
+      // hand-typed summary (never AI-generated) is left alone either way.
+      if (aiGeneratedForJobKey && aiGeneratedForJobKey !== jobKey) {
+        $("#f-summary").value = "";
+        $("#f-skills").value = "";
+        $("#f-jd").value = "";
+        aiGeneratedForJobKey = null;
+      }
       const summaryEl = $("#f-summary");
       if (!summaryEl.value.trim()) {
         summaryEl.value = company
