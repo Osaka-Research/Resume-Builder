@@ -906,22 +906,32 @@
   function generateResumeForJob(title, company, description, anchorEl) {
     $("#f-headline").value = title;
     $("#f-headline").classList.remove("mock-value");
-    // Don't clobber a summary the person already wrote -- only seed one if it's empty.
-    const summaryEl = $("#f-summary");
-    if (!summaryEl.value.trim()) {
-      summaryEl.value = company
-        ? `Aiming for the ${title} role at ${company}.`
-        : `Aiming for a ${title} role.`;
-      summaryEl.classList.remove("mock-value");
+    if (description) {
+      // A JD is available for this job -- always AI-tailor summary/skills to
+      // it (overwriting whatever was there from a previously viewed job).
+      // That's the whole point of generating a resume for a specific job.
+      $("#f-jd").value = description;
+      $(".r-jd-tools").open = true;
+      generateSummaryAndSkills();
+    } else {
+      // No scraped description for this listing -- nothing to tailor to, so
+      // fall back to a generic seed, but don't clobber a summary the person
+      // already wrote by hand.
+      const summaryEl = $("#f-summary");
+      if (!summaryEl.value.trim()) {
+        summaryEl.value = company
+          ? `Aiming for the ${title} role at ${company}.`
+          : `Aiming for a ${title} role.`;
+        summaryEl.classList.remove("mock-value");
+      }
     }
-    if (description) $("#f-jd").value = description;
     updateApplyButton();
     showBuildView(anchorEl);
   }
 
-  // ── AI summary generation, from pasted/seeded JD ──
+  // ── AI summary + skills generation, from pasted/seeded JD ──
 
-  $("#ai-summary-btn").addEventListener("click", async () => {
+  async function generateSummaryAndSkills() {
     const jd = $("#f-jd").value.trim();
     const statusEl = $("#ai-summary-status");
     const btn = $("#ai-summary-btn");
@@ -959,7 +969,9 @@
       btn.disabled = false;
       btn.textContent = "✨ Generate summary & skills with AI";
     }
-  });
+  }
+
+  $("#ai-summary-btn").addEventListener("click", () => generateSummaryAndSkills());
 
   // ── CSV export ──
 
