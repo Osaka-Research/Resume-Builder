@@ -85,15 +85,26 @@
     $("#build-view").style.display = "none";
   });
 
-  // First focus on a sample-filled field clears the placeholder text so
-  // it's a clean slate to type into, not something to select-and-overtype.
+  // First focus on a sample-filled field selects its text so typing
+  // immediately replaces it -- doesn't clear on mere click/tab-through,
+  // since that read as the field's real content vanishing (it's laid out
+  // like the actual resume now, not an obviously-empty boxed input).
   // Capture phase because focus doesn't bubble.
   document.getElementById("build-view").addEventListener("focus", (e) => {
     const el = e.target;
+    if (el.classList && el.classList.contains("mock-value") && typeof el.select === "function") {
+      el.select();
+    }
+  }, true);
+
+  // The mock-value -> real transition only happens once the person actually
+  // types (not on mere focus) -- capture phase so this runs before the
+  // per-field "input" -> render() listeners below, keeping autosave/submit
+  // from ever treating untouched sample text as something they entered.
+  document.getElementById("build-view").addEventListener("input", (e) => {
+    const el = e.target;
     if (el.classList && el.classList.contains("mock-value")) {
-      el.value = "";
       el.classList.remove("mock-value");
-      render();
     }
   }, true);
 
