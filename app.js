@@ -78,6 +78,21 @@
     return groups.map(g => g.label ? `${g.label}: ${g.items.join(", ")}` : g.items.join(", ")).join(" | ");
   }
 
+  // Removes only mock/sample skill-category rows, leaving anything the
+  // visitor actually typed alone. Used before an AI call that might come
+  // back with nothing useful (empty skillGroups) -- without this, leftover
+  // sample data (e.g. a marketing sample's "GTM, HubSpot") stays sitting in
+  // the skills section looking like the AI generated it for whatever job
+  // was just tailored to, when really the AI call just didn't clear it.
+  function clearMockSkillEntries() {
+    document.querySelectorAll('#skills-list .entry').forEach(entry => {
+      if (entry.querySelector(".sc-label").classList.contains("mock-value") ||
+          entry.querySelector(".sc-items").classList.contains("mock-value")) {
+        entry.remove();
+      }
+    });
+  }
+
   // Personal info + summary fields (skill-category inputs are wired by
   // addEntry() itself, same as experience/education entries)
   ["f-name", "f-headline", "f-email", "f-phone", "f-location", "f-link", "f-summary"]
@@ -367,6 +382,7 @@
       }));
     }
 
+    clearMockSkillEntries();
     if ((data.skillGroups || []).length) {
       document.getElementById("skills-list").innerHTML = "";
       data.skillGroups.forEach(g => addEntry("skills-list", "skill-category-template", {
@@ -1339,6 +1355,7 @@
       }
       $("#f-summary").value = data.summary || "";
       $("#f-summary").classList.remove("mock-value");
+      clearMockSkillEntries();
       if ((data.skillGroups || []).length) {
         // Replaces whatever categories were there with the AI's own
         // grouping rather than trying to guess how to merge into existing
@@ -1347,9 +1364,11 @@
         data.skillGroups.forEach(g => addEntry("skills-list", "skill-category-template", {
           "sc-label": g.label, "sc-items": (g.items || []).join(", "),
         }));
+        statusEl.textContent = "";
+      } else {
+        statusEl.textContent = "Summary updated, but couldn't find specific skills in that description.";
       }
       render();
-      statusEl.textContent = "";
     } catch (err) {
       // Surface the backend's actual reason (e.g. "that page loads content
       // dynamically") rather than a generic message that hides it.
