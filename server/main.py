@@ -207,6 +207,12 @@ async def _fetch_rendered_text(url: str, timeout: float = 25) -> str:
                         "button:has-text('Allow all')", "button:has-text('Allow All')",
                         "button:has-text('Accept')", "button:has-text('I Agree')",
                         "button:has-text('Got it')",
+                        # Granular preference-center variants (TrustArc etc.)
+                        # -- these show categories/checkboxes instead of a
+                        # single "Accept" button, so the confirm action reads
+                        # differently.
+                        "button:has-text('Save Changes')", "button:has-text('Confirm')",
+                        "button:has-text('Continue')", "button:has-text('Select All')",
                     ]
                     dismissed = False
                     for frame in page.frames:
