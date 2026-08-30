@@ -141,7 +141,8 @@
 
   .r-bullets-input { font-size: 13px; line-height: 1.5; color: #333; min-height: 48px; margin-top: 6px; }
 
-  .r-skills-input { font-size: 13px; color: #333; }
+  .r-skill-cat-label { font-size: 13px; font-weight: 700; display: block; }
+  .r-skill-cat-items { font-size: 13px; color: #333; display: block; width: 100%; margin-top: 2px; }
 
   .entry {
     position: relative;
@@ -432,21 +433,16 @@
 
   .r-bullets li { margin-bottom: 2px; }
 
-  .r-skills {
+  .r-skills-groups {
     font-size: 13px;
-    line-height: 1.7;
+    line-height: 1.6;
     color: #333;
   }
 
-  .r-skills .tag {
-    display: inline-block;
-    background: #eef2fa;
-    color: var(--accent);
-    font-weight: 600;
-    padding: 3px 10px;
-    border-radius: 20px;
-    margin: 0 6px 6px 0;
-    font-size: 12px;
+  .r-skill-group { margin-bottom: 3px; }
+  .r-skill-group:last-child { margin-bottom: 0; }
+  .r-skill-group-label {
+    font-weight: 700;
   }
 
   .r-empty {
@@ -992,14 +988,15 @@
       </div>
 
       <div class="r-section">
-        <h3>Education</h3>
-        <div id="education-list"></div>
-        <button class="add-btn" id="add-education" type="button">+ Add Education</button>
+        <h3>Skills</h3>
+        <div id="skills-list"></div>
+        <button class="add-btn" id="add-skill-category" type="button">+ Add Skill Category</button>
       </div>
 
       <div class="r-section">
-        <h3>Skills</h3>
-        <input id="f-skills" class="r-input r-skills-input" type="text" autocomplete="off" placeholder="Comma-separated skills">
+        <h3>Education</h3>
+        <div id="education-list"></div>
+        <button class="add-btn" id="add-education" type="button">+ Add Education</button>
       </div>
     </div>
 
@@ -1086,11 +1083,19 @@
   </div>
 </template>
 
+<template id="skill-category-template">
+  <div class="entry r-skill-cat" data-kind="skill-category">
+    <button class="remove-btn" title="Remove">✕</button>
+    <input class="sc-label r-input r-skill-cat-label" type="text" placeholder="Category (e.g. Cloud Platforms)">
+    <input class="sc-items r-input r-skill-cat-items" type="text" placeholder="Comma-separated skills">
+  </div>
+</template>
+
 <!-- Bump ?v= whenever app.js changes so browsers don't reuse a cached copy
      on a fresh page load. The update-check script below (for tabs already
      open when a deploy happens) is separate and doesn't rely on this. -->
 <script src="dictionary.js?v=35c2a6a0"></script>
-<script src="app.js?v=587c865"></script>
+<script src="app.js?v=4bf867a"></script>
 <script>
   // ── Update checker ──────────────────────────────────────────────────
   // A silent auto-reload here could wipe someone's half-filled resume

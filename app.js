@@ -57,9 +57,31 @@
 
   $("#add-experience").addEventListener("click", () => addEntry("experience-list", "experience-template"));
   $("#add-education").addEventListener("click", () => addEntry("education-list", "education-template"));
+  $("#add-skill-category").addEventListener("click", () => addEntry("skills-list", "skill-category-template"));
 
-  // Personal info + summary + skills fields
-  ["f-name", "f-headline", "f-email", "f-phone", "f-location", "f-link", "f-summary", "f-skills"]
+  // Reads the skill-category entries currently in the editor. useReal
+  // excludes anything still showing sample placeholder text, same rule
+  // render() applies to experience/education before saving/submitting.
+  function collectSkillGroups(useReal) {
+    return [...document.querySelectorAll('#skills-list .entry')].map(e => {
+      const labelEl = e.querySelector(".sc-label");
+      const itemsEl = e.querySelector(".sc-items");
+      const label = (useReal && labelEl.classList.contains("mock-value")) ? "" : labelEl.value.trim();
+      const items = (useReal && itemsEl.classList.contains("mock-value")) ? [] : itemsEl.value.split(",").map(s => s.trim()).filter(Boolean);
+      return { label, items };
+    }).filter(g => g.label || g.items.length);
+  }
+
+  // Serializes categories back to the flat "Label: a, b | Label2: c, d"
+  // string the backend's skills field (a free-text column, unaware of
+  // categories) already expects.
+  function flattenSkillGroups(groups) {
+    return groups.map(g => g.label ? `${g.label}: ${g.items.join(", ")}` : g.items.join(", ")).join(" | ");
+  }
+
+  // Personal info + summary fields (skill-category inputs are wired by
+  // addEntry() itself, same as experience/education entries)
+  ["f-name", "f-headline", "f-email", "f-phone", "f-location", "f-link", "f-summary"]
     .forEach(id => document.getElementById(id).addEventListener("input", render));
 
   $("#download-resume-btn").addEventListener("click", () => window.print());
@@ -76,6 +98,7 @@
     });
     document.getElementById("experience-list").innerHTML = "";
     document.getElementById("education-list").innerHTML = "";
+    document.getElementById("skills-list").innerHTML = "";
     currentJob = null;
     updateApplyButton();
     render();
@@ -294,7 +317,7 @@
     const location = $("#f-location").value.trim();
     const link = $("#f-link").value.trim();
     const summary = $("#f-summary").value.trim();
-    const skills = $("#f-skills").value.split(",").map(s => s.trim()).filter(Boolean);
+    const skillGroups = collectSkillGroups(false);
 
     const contactParts = [email, phone, location, link].filter(Boolean);
 
@@ -343,6 +366,10 @@
       html += `</div>`;
     }
 
+    if (skillGroups.length) {
+      html += `<div class="r-section"><h3>Skills</h3><div class="r-skills-groups">${skillGroups.map(g => `<div class="r-skill-group">${g.label ? `<span class="r-skill-group-label">${escapeHtml(g.label)}: </span>` : ""}${escapeHtml(g.items.join(", "))}</div>`).join("")}</div></div>`;
+    }
+
     if (education.length) {
       html += `<div class="r-section"><h3>Education</h3>`;
       education.forEach(e => {
@@ -358,10 +385,6 @@
         </div>`;
       });
       html += `</div>`;
-    }
-
-    if (skills.length) {
-      html += `<div class="r-section"><h3>Skills</h3><div class="r-skills">${skills.map(s => `<span class="tag">${escapeHtml(s)}</span>`).join("")}</div></div>`;
     }
 
     preview.innerHTML = html;
@@ -393,6 +416,8 @@
       end: realVal(e.querySelector(".d-end")),
     })).filter(e => e.degree || e.school || e.location || e.start || e.end);
 
+    const realSkillGroups = collectSkillGroups(true);
+
     const dataOut = {
       name: realVal($("#f-name")),
       headline: realVal($("#f-headline")),
@@ -401,7 +426,8 @@
       location: realVal($("#f-location")),
       link: realVal($("#f-link")),
       summary: realVal($("#f-summary")),
-      skills: $("#f-skills").classList.contains("mock-value") ? "" : $("#f-skills").value,
+      skills: flattenSkillGroups(realSkillGroups),
+      skillGroups: realSkillGroups,
       experience: realExperience,
       education: realEducation,
     };
@@ -486,7 +512,6 @@
     $("#f-location").value = data.location || "";
     $("#f-link").value = data.link || "";
     $("#f-summary").value = data.summary || "";
-    $("#f-skills").value = data.skills || "";
 
     (data.experience || []).forEach(e => addEntry("experience-list", "experience-template", {
       "e-title": e.title, "e-company": e.company, "e-location": e.location,
@@ -496,6 +521,16 @@
       "d-degree": e.degree, "d-school": e.school, "d-location": e.location,
       "d-start": e.start, "d-end": e.end,
     }));
+
+    if (data.skillGroups && data.skillGroups.length) {
+      data.skillGroups.forEach(g => addEntry("skills-list", "skill-category-template", {
+        "sc-label": g.label, "sc-items": (g.items || []).join(", "),
+      }));
+    } else if (data.skills) {
+      // Pre-existing draft saved before skills had categories -- keep the
+      // flat list rather than silently dropping it.
+      addEntry("skills-list", "skill-category-template", { "sc-label": "", "sc-items": data.skills });
+    }
   }
 
   // ── View switching (Jobs is the homepage; Build Resume is reached from a
@@ -947,7 +982,7 @@
       // hand-typed summary (never AI-generated) is left alone either way.
       if (aiGeneratedForJobKey && aiGeneratedForJobKey !== jobKey) {
         $("#f-summary").value = "";
-        $("#f-skills").value = "";
+        document.getElementById("skills-list").innerHTML = "";
         $("#f-jd").value = "";
         aiGeneratedForJobKey = null;
       }
@@ -984,7 +1019,7 @@
           jd,
           name: $("#f-name").value.trim(),
           headline: $("#f-headline").value.trim(),
-          skills: $("#f-skills").value.trim(),
+          skills: flattenSkillGroups(collectSkillGroups(false)),
         }),
       });
       const data = await res.json();
@@ -992,8 +1027,11 @@
       $("#f-summary").value = data.summary || "";
       $("#f-summary").classList.remove("mock-value");
       if (data.skills) {
-        $("#f-skills").value = data.skills;
-        $("#f-skills").classList.remove("mock-value");
+        // AI returns one flat list -- replaces whatever categories were
+        // there with a single category rather than trying to guess how
+        // to merge into existing ones.
+        document.getElementById("skills-list").innerHTML = "";
+        addEntry("skills-list", "skill-category-template", { "sc-label": "Skills", "sc-items": data.skills });
       }
       render();
       statusEl.textContent = "";
@@ -1211,8 +1249,8 @@
   function fillSampleProfile() {
     const p = SAMPLE_PROFILES[Math.floor(Math.random() * SAMPLE_PROFILES.length)];
 
-    const fields = ["f-name", "f-headline", "f-email", "f-phone", "f-location", "f-link", "f-summary", "f-skills"];
-    const values = [p.name, p.headline, p.email, p.phone, p.location, p.link, p.summary, p.skills];
+    const fields = ["f-name", "f-headline", "f-email", "f-phone", "f-location", "f-link", "f-summary"];
+    const values = [p.name, p.headline, p.email, p.phone, p.location, p.link, p.summary];
     fields.forEach((id, i) => {
       const el = $("#" + id);
       el.value = values[i];
@@ -1220,6 +1258,7 @@
     });
 
     p.experience.forEach(data => addEntry("experience-list", "experience-template", data, true));
+    addEntry("skills-list", "skill-category-template", { "sc-label": "Skills", "sc-items": p.skills }, true);
     p.education.forEach(data => addEntry("education-list", "education-template", data, true));
   }
 
