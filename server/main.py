@@ -170,6 +170,11 @@ async def _fetch_rendered_text(url: str, timeout: float = 25) -> str:
     broken or not-yet-provisioned browser setup just degrades to whatever
     the static fetch got instead of breaking the request."""
     try:
+        # Must match the predeploy hook's install path exactly -- the app
+        # runs as a different user (different $HOME) than the root-run hook
+        # that installed the browser, so the default ~/.cache/ms-playwright
+        # lookup would never find it.
+        os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "/opt/ms-playwright")
         from playwright.async_api import async_playwright
     except ImportError:
         return ""

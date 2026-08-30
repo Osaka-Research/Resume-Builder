@@ -12,6 +12,14 @@
 # after the platform installs dependencies, before the app restarts).
 set -x
 
+# This hook runs as root, but the app itself runs as a different user
+# (webapp) with a different $HOME -- Playwright's default browser cache path
+# is ~/.cache/ms-playwright, which would put the browser somewhere the app
+# process can never see. Force both install and runtime lookup (main.py sets
+# the same var before importing playwright) to one shared, absolute path
+# instead of relying on either user's HOME.
+export PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+
 VENV_PY="$(ls /var/app/venv/*/bin/python3 2>/dev/null | head -1)"
 if [ -z "$VENV_PY" ]; then
   echo "chromium-setup: couldn't find the app venv's python, skipping" >&2
@@ -31,5 +39,9 @@ dnf install -y \
 
 "$VENV_PY" -m playwright install chromium \
   || echo "chromium-setup: playwright install failed -- URL-scrape will fall back to plain fetch" >&2
+
+# Whatever user the app runs as needs to read+execute this -- it was just
+# installed as root.
+chmod -R a+rX "$PLAYWRIGHT_BROWSERS_PATH" 2>/dev/null || true
 
 exit 0
