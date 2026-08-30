@@ -1329,6 +1329,12 @@
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Request failed");
+      if (data.title) {
+        // Tailoring to a specific job -- the headline should track it, same
+        // as clicking "Generate Resume" from a job search result does.
+        $("#f-headline").value = data.title;
+        $("#f-headline").classList.remove("mock-value");
+      }
       $("#f-summary").value = data.summary || "";
       $("#f-summary").classList.remove("mock-value");
       if (data.skills) {
@@ -1341,7 +1347,9 @@
       render();
       statusEl.textContent = "";
     } catch (err) {
-      statusEl.textContent = "Couldn't generate a summary right now. Try again in a moment.";
+      // Surface the backend's actual reason (e.g. "that page loads content
+      // dynamically") rather than a generic message that hides it.
+      statusEl.textContent = err.message || "Couldn't generate a summary right now. Try again in a moment.";
     } finally {
       btn.disabled = false;
       btn.textContent = "✨ Generate summary & skills with AI";

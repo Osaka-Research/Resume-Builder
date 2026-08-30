@@ -151,6 +151,20 @@ async def _fetch_page_text(url: str, timeout: float = 15) -> str:
     text = re.sub(r"\s*\n\s*", "\n", text).strip()
     if not text:
         raise HTTPException(status_code=422, detail="That page didn't have any readable text on it.")
+    # Many career sites (Workday, ADP, Greenhouse's dynamic variant, etc.)
+    # render the actual posting client-side via JS -- a plain server-side
+    # fetch only gets an near-empty shell (e.g. ADP's is literally just a
+    # "please switch to a supported browser" notice). Rather than silently
+    # feeding the AI ~100 characters of nothing and getting back a generic,
+    # made-up-sounding result, fail clearly so the person knows to paste the
+    # description text instead.
+    if len(text) < 250:
+        raise HTTPException(
+            status_code=422,
+            detail="That page's content loads dynamically (common on Workday/ADP/etc.) -- "
+                   "we can only read static page text. Copy the job description text itself "
+                   "and paste it here instead.",
+        )
     return text[:8000]
 
 
@@ -168,7 +182,9 @@ async def generate_summary(req: GenerateSummaryRequest) -> dict:
         jd_text = await _fetch_page_text(jd_text)
 
     prompt = (
-        "Given the job description below, return a JSON object with two fields:\n"
+        "Given the job description below, return a JSON object with three fields:\n"
+        '"title" -- the job title this posting is for, exactly as the posting states it '
+        '(e.g. "Senior Data Engineer"), or "" if you can\'t find one stated.\n'
         '"summary" -- a 2-3 sentence professional resume summary tailored to the job '
         "description, mirroring its key requirements and keywords naturally, but staying "
         "truthful to the candidate's given profile: don't invent experience or skills that "
@@ -193,12 +209,13 @@ async def generate_summary(req: GenerateSummaryRequest) -> dict:
     cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
     try:
         parsed = json.loads(cleaned)
+        title = str(parsed.get("title") or "").strip()
         summary = str(parsed.get("summary") or "").strip()
         skills = str(parsed.get("skills") or "").strip()
     except (json.JSONDecodeError, AttributeError):
-        summary, skills = raw.strip(), ""
+        title, summary, skills = "", raw.strip(), ""
 
-    return {"summary": summary, "skills": skills}
+    return {"title": title, "summary": summary, "skills": skills}
 
 
 class ParseResumeRequest(BaseModel):
