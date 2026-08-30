@@ -461,8 +461,8 @@
         html += `<div class="r-item">
           <div class="r-item-top">
             <div>
-              <div class="r-item-title">${escapeHtml(e.title)}</div>
-              <div class="r-item-sub">${escapeHtml(e.company)}${e.location ? " — " + escapeHtml(e.location) : ""}</div>
+              <div class="r-item-title">${escapeHtml(e.company)}</div>
+              <div class="r-item-sub">${escapeHtml(e.title)}${e.location ? " — " + escapeHtml(e.location) : ""}</div>
             </div>
             <div class="r-item-date">${escapeHtml([e.start, e.end].filter(Boolean).join(" – "))}</div>
           </div>

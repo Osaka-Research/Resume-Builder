@@ -107,13 +107,13 @@
   .r-input::placeholder { color: #b3b8c8; font-style: italic; }
   textarea.r-input { resize: vertical; }
 
-  .r-name-input { font-size: 30px; font-weight: 800; letter-spacing: -0.5px; }
+  .r-name-input { font-size: 26px; font-weight: 400; letter-spacing: 0; color: #2e74b5; text-align: center; }
 
-  .r-headline-input { font-size: 15px; color: var(--accent); font-weight: 600; margin-top: 2px; }
+  .r-headline-input { font-size: 15px; color: #2e74b5; font-weight: 600; margin-top: 2px; text-align: center; }
 
-  .r-contact-row { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; }
+  .r-contact-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 10px; margin-top: 8px; }
 
-  .r-contact-input { font-size: 12.5px; color: var(--muted); width: auto; flex: 1 1 120px; min-width: 90px; }
+  .r-contact-input { font-size: 12.5px; color: #333; width: auto; flex: 0 1 auto; min-width: 60px; text-align: center; }
 
   .r-jd-tools { margin-top: 10px; font-size: 12px; color: var(--muted); }
   .r-jd-tools summary { cursor: pointer; font-weight: 600; }
@@ -136,8 +136,8 @@
   .r-sep { color: var(--muted); font-size: 12px; }
 
   .r-item-title-input { font-size: 14px; font-weight: 700; }
-  .r-item-sub-input { font-size: 13px; font-style: italic; color: #444; width: auto; flex: 1 1 auto; min-width: 80px; }
-  .r-item-date-input { font-size: 12px; color: var(--muted); font-weight: 600; width: 64px; text-align: right; }
+  .r-item-sub-input { font-size: 13px; color: #333; width: auto; flex: 1 1 auto; min-width: 80px; }
+  .r-item-date-input { font-size: 12px; color: #333; font-weight: 700; width: 64px; text-align: right; }
 
   .r-bullets-input { font-size: 13px; line-height: 1.5; color: #333; min-height: 48px; margin-top: 6px; }
 
@@ -262,6 +262,8 @@
     min-height: 1050px;
     box-shadow: 0 2px 12px rgba(0,0,0,0.12);
     padding: 52px 56px;
+    font-family: "Times New Roman", Times, Georgia, serif;
+    color: #000;
   }
 
   .final-actions {
@@ -350,24 +352,28 @@
   .submit-status.error { color: #b33; }
 
   .r-name {
-    font-size: 30px;
-    font-weight: 800;
-    letter-spacing: -0.5px;
+    font-size: 26px;
+    font-weight: 400;
+    letter-spacing: 0;
+    color: #2e74b5;
+    text-align: center;
   }
 
   .r-headline {
     font-size: 15px;
-    color: var(--accent);
+    color: #2e74b5;
     font-weight: 600;
     margin-top: 2px;
+    text-align: center;
   }
 
   .r-contact {
     font-size: 12.5px;
-    color: var(--muted);
+    color: #333;
     margin-top: 8px;
     display: flex;
     flex-wrap: wrap;
+    justify-content: center;
     gap: 4px 10px;
   }
 
@@ -380,7 +386,8 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.6px;
-    border-bottom: 1.5px solid var(--ink);
+    color: #2e74b5;
+    border-bottom: 1px solid #000;
     padding-bottom: 4px;
     margin-bottom: 10px;
   }
@@ -412,15 +419,14 @@
 
   .r-item-sub {
     font-size: 13px;
-    font-style: italic;
-    color: #444;
+    color: #333;
   }
 
   .r-item-date {
     font-size: 12px;
-    color: var(--muted);
+    color: #333;
     white-space: nowrap;
-    font-weight: 600;
+    font-weight: 700;
   }
 
   .r-bullets {
@@ -1045,9 +1051,9 @@
     <button class="remove-btn" title="Remove">✕</button>
     <div class="r-item-top">
       <div class="r-item-main">
-        <input class="e-title r-input r-item-title-input" type="text" placeholder="Job Title">
+        <input class="e-company r-input r-item-title-input" type="text" placeholder="Company">
         <div class="r-item-sub-row">
-          <input class="e-company r-input r-item-sub-input" type="text" placeholder="Company">
+          <input class="e-title r-input r-item-sub-input" type="text" placeholder="Job Title">
           <span class="r-sep">—</span>
           <input class="e-location r-input r-item-sub-input" type="text" placeholder="Location">
         </div>
@@ -1095,7 +1101,7 @@
      on a fresh page load. The update-check script below (for tabs already
      open when a deploy happens) is separate and doesn't rely on this. -->
 <script src="dictionary.js?v=35c2a6a0"></script>
-<script src="app.js?v=533412f"></script>
+<script src="app.js?v=4350769"></script>
 <script>
   // ── Update checker ──────────────────────────────────────────────────
   // A silent auto-reload here could wipe someone's half-filled resume
