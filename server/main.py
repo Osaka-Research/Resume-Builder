@@ -9,6 +9,7 @@ Routes:
 """
 from __future__ import annotations
 
+import asyncio
 import html as html_module
 import json
 import logging
@@ -128,11 +129,13 @@ class GenerateSummaryRequest(BaseModel):
 URL_ONLY_RE = re.compile(r"^https?://\S+$", re.I)
 
 
-async def _fetch_page_text(url: str, timeout: float = 15) -> str:
-    """Fetches a URL server-side (the browser can't -- most job boards block
-    cross-origin fetches) and strips it down to plain readable text, so the
-    same AI-tailor prompt below can work from a pasted link exactly like a
-    pasted job description."""
+MIN_USABLE_TEXT_LEN = 250  # shorter than this reads as "loading shell", not real content
+
+
+async def _fetch_static_text(url: str, timeout: float = 15) -> str:
+    """Cheap path: a plain server-side HTTP fetch, no JS execution. Returns
+    "" on any failure -- the caller decides what to do about it (fall back to
+    a real browser render, see _fetch_rendered_text below)."""
     try:
         async with httpx.AsyncClient(
             timeout=timeout, follow_redirects=True,
@@ -141,7 +144,7 @@ async def _fetch_page_text(url: str, timeout: float = 15) -> str:
             resp = await client.get(url)
         resp.raise_for_status()
     except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="Couldn't fetch that link -- double-check the URL and try again.")
+        return ""
 
     body = resp.text
     body = re.sub(r"<(script|style)\b[^>]*>.*?</\1>", " ", body, flags=re.I | re.S)
@@ -149,21 +152,68 @@ async def _fetch_page_text(url: str, timeout: float = 15) -> str:
     text = html_module.unescape(text)
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\s*\n\s*", "\n", text).strip()
+    return text
+
+
+# Only one headless-browser render at a time -- this box has 1GB RAM total
+# and already runs job scraping in the same process; a second concurrent
+# Chromium instance is a real OOM risk, so requests queue instead of piling
+# up multiple browsers.
+_chromium_semaphore = asyncio.Semaphore(1)
+
+
+async def _fetch_rendered_text(url: str, timeout: float = 25) -> str:
+    """Heavier fallback for JS-rendered career sites (Workday/ADP/etc.) that
+    a plain fetch can't read -- launches a real headless Chromium via
+    Playwright. Best-effort: returns "" on ANY failure (Chromium not
+    installed, launch failure, page timeout) rather than raising, so a
+    broken or not-yet-provisioned browser setup just degrades to whatever
+    the static fetch got instead of breaking the request."""
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError:
+        return ""
+
+    async with _chromium_semaphore:
+        try:
+            async with async_playwright() as pw:
+                browser = await pw.chromium.launch(args=[
+                    "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu",
+                    "--disable-extensions", "--disable-background-networking",
+                ])
+                try:
+                    page = await browser.new_page()
+                    await page.goto(url, wait_until="networkidle", timeout=timeout * 1000)
+                    raw_text = await page.inner_text("body")
+                finally:
+                    await browser.close()
+        except Exception:
+            log.exception("headless render failed for %s", url)
+            return ""
+
+    text = re.sub(r"[ \t]+", " ", raw_text)
+    text = re.sub(r"\s*\n\s*", "\n", text).strip()
+    return text
+
+
+async def _fetch_page_text(url: str) -> str:
+    """Job-posting text for a pasted link, tried cheapest-first: a plain
+    fetch handles most postings; a full headless-browser render (heavy, see
+    above) only runs when that didn't get enough real content -- e.g.
+    Workday/ADP-style pages that render client-side via JS."""
+    text = await _fetch_static_text(url)
+    if len(text) < MIN_USABLE_TEXT_LEN:
+        rendered = await _fetch_rendered_text(url)
+        if len(rendered) > len(text):
+            text = rendered
+
     if not text:
-        raise HTTPException(status_code=422, detail="That page didn't have any readable text on it.")
-    # Many career sites (Workday, ADP, Greenhouse's dynamic variant, etc.)
-    # render the actual posting client-side via JS -- a plain server-side
-    # fetch only gets an near-empty shell (e.g. ADP's is literally just a
-    # "please switch to a supported browser" notice). Rather than silently
-    # feeding the AI ~100 characters of nothing and getting back a generic,
-    # made-up-sounding result, fail clearly so the person knows to paste the
-    # description text instead.
-    if len(text) < 250:
+        raise HTTPException(status_code=502, detail="Couldn't fetch that link -- double-check the URL and try again.")
+    if len(text) < MIN_USABLE_TEXT_LEN:
         raise HTTPException(
             status_code=422,
-            detail="That page's content loads dynamically (common on Workday/ADP/etc.) -- "
-                   "we can only read static page text. Copy the job description text itself "
-                   "and paste it here instead.",
+            detail="Couldn't find enough of that posting's text to work with -- "
+                   "copy the job description text itself and paste it here instead.",
         )
     return text[:8000]
 
