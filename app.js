@@ -1,5 +1,4 @@
   const $ = sel => document.querySelector(sel);
-  const preview = $("#preview");
 
   function escapeHtml(s) {
     return (s || "").replace(/[&<>"']/g, c => ({
@@ -84,7 +83,31 @@
   ["f-name", "f-headline", "f-email", "f-phone", "f-location", "f-link", "f-summary"]
     .forEach(id => document.getElementById(id).addEventListener("input", render));
 
-  $("#download-resume-btn").addEventListener("click", () => window.print());
+  $("#download-resume-btn").addEventListener("click", async () => {
+    const btn = $("#download-resume-btn");
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Preparing…";
+    try {
+      const tools = await loadDocxTools();
+      const data = collectPreviewData();
+      const blob = await buildResumeDocxBlob(data, tools.docx);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const fileBase = (data.name || "resume").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-") || "resume";
+      a.download = `${fileBase}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    } catch (err) {
+      alert("Couldn't generate the download: " + (err.message || "unknown error"));
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  });
 
   function updateApplyButton() {
     $("#apply-job-btn").style.display = (currentJob && currentJob.url) ? "" : "none";
@@ -413,87 +436,261 @@
     }
   });
 
+  // ── Live "exact Word formatting" preview: rather than approximating the
+  // reference resume's look with hand-written CSS (which has a hard ceiling
+  // -- no CSS layout truly matches Word's own), this builds a REAL .docx
+  // from the current form data, using the same paragraph styles pulled from
+  // the reference file (Heading1/Heading2 colors+sizes, tab-stop-aligned
+  // bold company/dates, bullet numbering), and renders that actual file
+  // with docx-preview. What's shown on screen is Word's own layout engine,
+  // not a guess at it -- and it's the exact file Download hands over. ──
+
+  let jsZipLoadPromise = null;
+  function loadJsZip() {
+    if (window.JSZip) return Promise.resolve(window.JSZip);
+    if (jsZipLoadPromise) return jsZipLoadPromise;
+    jsZipLoadPromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "vendor/jszip/jszip.min.js";
+      script.onload = () => window.JSZip ? resolve(window.JSZip) : reject(new Error("JSZip failed to initialize"));
+      script.onerror = () => reject(new Error("Couldn't load JSZip"));
+      document.head.appendChild(script);
+    }).catch(err => { jsZipLoadPromise = null; throw err; });
+    return jsZipLoadPromise;
+  }
+
+  let docxToolsLib = null; // { docx: <generator lib>, docxPreview: <renderer lib> }
+  let docxToolsLoadPromise = null;
+
+  // docx (generates .docx files) and docx-preview (renders them) are two
+  // separate packages that both assign themselves to the same UMD global
+  // (window.docx) when loaded as plain <script> tags. Load docx-preview
+  // first and capture it immediately, before docx's script tag overwrites
+  // window.docx with itself.
+  function loadDocxTools() {
+    if (docxToolsLib) return Promise.resolve(docxToolsLib);
+    if (docxToolsLoadPromise) return docxToolsLoadPromise;
+    docxToolsLoadPromise = loadJsZip()
+      .then(() => new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "vendor/docx-preview/docx-preview.min.js";
+        script.onload = () => window.docx ? resolve(window.docx) : reject(new Error("docx-preview failed to initialize"));
+        script.onerror = () => reject(new Error("Couldn't load the document previewer"));
+        document.head.appendChild(script);
+      }))
+      .then(docxPreview => new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "vendor/docx/docx.umd.js";
+        script.onload = () => window.docx ? resolve({ docx: window.docx, docxPreview }) : reject(new Error("docx generator failed to initialize"));
+        script.onerror = () => reject(new Error("Couldn't load the document generator"));
+        document.head.appendChild(script);
+      }))
+      .then(lib => { docxToolsLib = lib; return lib; })
+      .catch(err => { docxToolsLoadPromise = null; throw err; });
+    return docxToolsLoadPromise;
+  }
+
+  const RESUME_ACCENT_HEX = "2E74B5"; // the reference doc's actual heading-color
+  const PAGE_WIDTH_TWIP = 12240;   // 8.5in Letter, twentieths of a point
+  const PAGE_HEIGHT_TWIP = 15840;  // 11in Letter
+  const PAGE_MARGIN_TWIP = 600;    // 30pt -- matches the reference doc's tight margins
+  const CONTENT_WIDTH_TWIP = PAGE_WIDTH_TWIP - 2 * PAGE_MARGIN_TWIP;
+
+  // Builds a real .docx Blob from the resume-builder's own field shape,
+  // mirroring the reference file's actual Word styles (extracted from its
+  // styles.xml/document.xml) rather than approximating them.
+  async function buildResumeDocxBlob(data, docxLib) {
+    const {
+      Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle, TabStopType,
+    } = docxLib;
+
+    function sectionHeader(text) {
+      return new Paragraph({
+        heading: HeadingLevel.HEADING_2,
+        border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: "auto", space: 1 } },
+        spacing: { before: 120, after: 60 },
+        children: [new TextRun({ text })],
+      });
+    }
+
+    // One line combining a bold "lead" (company/degree), optional plain
+    // "rest" (role/location), and a bold right-tab-aligned date -- matches
+    // the reference doc's "**Company**, Title␉**Dates**" pattern exactly.
+    function entryLine(lead, rest, dates) {
+      const children = [new TextRun({ text: lead, bold: true })];
+      if (rest) children.push(new TextRun({ text: rest }));
+      if (dates) children.push(new TextRun({ text: `\t${dates}`, bold: true }));
+      return new Paragraph({
+        tabStops: [{ type: TabStopType.RIGHT, position: CONTENT_WIDTH_TWIP }],
+        spacing: { before: 80, after: 40 },
+        children,
+      });
+    }
+
+    function bulletLine(text) {
+      return new Paragraph({ text, bullet: { level: 0 }, spacing: { after: 20 } });
+    }
+
+    const children = [];
+
+    children.push(new Paragraph({
+      heading: HeadingLevel.HEADING_1,
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 60 },
+      children: [new TextRun({ text: data.name || "Your Name" })],
+    }));
+
+    if (data.headline) {
+      children.push(new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 60 },
+        children: [new TextRun({ text: data.headline, bold: true, color: RESUME_ACCENT_HEX })],
+      }));
+    }
+
+    const contactParts = [data.email, data.phone, data.location, data.link].filter(Boolean);
+    if (contactParts.length) {
+      children.push(new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 120 },
+        children: [new TextRun({ text: contactParts.join(" | ") })],
+      }));
+    }
+
+    if (data.summary) {
+      children.push(sectionHeader("SUMMARY"));
+      children.push(new Paragraph({ text: data.summary, spacing: { after: 80 } }));
+    }
+
+    const experience = (data.experience || []).filter(e => e.title || e.company);
+    if (experience.length) {
+      children.push(sectionHeader("EXPERIENCE"));
+      experience.forEach(e => {
+        const lead = e.company || e.title;
+        const restBits = [];
+        if (e.company && e.title) restBits.push(`, ${e.title}`);
+        if (e.location) restBits.push((restBits.length ? " — " : "") + e.location);
+        children.push(entryLine(lead, restBits.join(""), [e.start, e.end].filter(Boolean).join(" – ")));
+        (e.bullets || []).forEach(b => children.push(bulletLine(b)));
+      });
+    }
+
+    const skillGroups = (data.skillGroups || []).filter(g => g.items && g.items.length);
+    if (skillGroups.length) {
+      children.push(sectionHeader("SKILLS"));
+      skillGroups.forEach(g => {
+        children.push(new Paragraph({
+          spacing: { after: 40 },
+          children: g.label
+            ? [new TextRun({ text: `${g.label}: `, bold: true }), new TextRun({ text: g.items.join(", ") })]
+            : [new TextRun({ text: g.items.join(", ") })],
+        }));
+      });
+    }
+
+    const education = (data.education || []).filter(e => e.degree || e.school);
+    if (education.length) {
+      children.push(sectionHeader("EDUCATION"));
+      education.forEach(e => {
+        const lead = e.degree || e.school;
+        children.push(entryLine(lead, "", [e.start, e.end].filter(Boolean).join(" – ")));
+        if (e.degree) {
+          const schoolLine = [e.school, e.location].filter(Boolean).join(" — ");
+          if (schoolLine) children.push(new Paragraph({ text: schoolLine, indent: { left: 200 }, spacing: { after: 80 } }));
+        }
+      });
+    }
+
+    const doc = new Document({
+      styles: {
+        default: { document: { run: { font: "Tinos", size: 20 } } },
+        paragraphStyles: [
+          { id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true, run: { color: RESUME_ACCENT_HEX, size: 32 } },
+          { id: "Heading2", name: "Heading 2", basedOn: "Normal", next: "Normal", quickFormat: true, run: { color: RESUME_ACCENT_HEX, size: 26, bold: true } },
+        ],
+      },
+      sections: [{
+        properties: {
+          page: {
+            size: { width: PAGE_WIDTH_TWIP, height: PAGE_HEIGHT_TWIP },
+            margin: { top: PAGE_MARGIN_TWIP, right: PAGE_MARGIN_TWIP, bottom: PAGE_MARGIN_TWIP, left: PAGE_MARGIN_TWIP },
+          },
+        },
+        children,
+      }],
+    });
+
+    return Packer.toBlob(doc);
+  }
+
+  let docxPreviewGeneration = 0;
+  let docxPreviewDebounceTimer = null;
+
+  function scheduleDocxPreviewRender(data) {
+    clearTimeout(docxPreviewDebounceTimer);
+    docxPreviewDebounceTimer = setTimeout(() => renderDocxPreview(data), 450);
+  }
+
+  // A generation counter drops a render that finishes after a newer one was
+  // already requested (e.g. two keystrokes close together both trigger a
+  // build+render; only the later one should ever reach the DOM).
+  async function renderDocxPreview(data) {
+    const myGeneration = ++docxPreviewGeneration;
+    const target = document.getElementById("docx-preview-target");
+    if (!target) return;
+    try {
+      const tools = await loadDocxTools();
+      if (myGeneration !== docxPreviewGeneration) return;
+      const blob = await buildResumeDocxBlob(data, tools.docx);
+      if (myGeneration !== docxPreviewGeneration) return;
+      target.innerHTML = "";
+      await tools.docxPreview.renderAsync(blob, target, target, {
+        inWrapper: true,
+        breakPages: true,
+        ignoreFonts: false,
+      });
+    } catch (err) {
+      if (myGeneration !== docxPreviewGeneration) return;
+      target.innerHTML = `<div class="preview-error">Couldn't render the live preview (${escapeHtml(err.message || "unknown error")}). Your data is still saved -- try again in a moment.</div>`;
+    }
+  }
+
+  // Reads the current form state into the plain-object shape both the live
+  // preview and the docx download build from. Includes sample/mock
+  // placeholder text (unlike the real* variables inside render() below) so
+  // the preview is never blank before the visitor has typed anything.
+  function collectPreviewData() {
+    return {
+      name: $("#f-name").value.trim(),
+      headline: $("#f-headline").value.trim(),
+      email: $("#f-email").value.trim(),
+      phone: $("#f-phone").value.trim(),
+      location: $("#f-location").value.trim(),
+      link: $("#f-link").value.trim(),
+      summary: $("#f-summary").value.trim(),
+      skillGroups: collectSkillGroups(false),
+      experience: [...document.querySelectorAll('#experience-list .entry')].map(e => ({
+        title: e.querySelector(".e-title").value.trim(),
+        company: e.querySelector(".e-company").value.trim(),
+        location: e.querySelector(".e-location").value.trim(),
+        start: e.querySelector(".e-start").value.trim(),
+        end: e.querySelector(".e-end").value.trim(),
+        bullets: e.querySelector(".e-bullets").value.split("\n").map(s => s.trim()).filter(Boolean),
+      })),
+      education: [...document.querySelectorAll('#education-list .entry')].map(e => ({
+        degree: e.querySelector(".d-degree").value.trim(),
+        school: e.querySelector(".d-school").value.trim(),
+        location: e.querySelector(".d-location").value.trim(),
+        start: e.querySelector(".d-start").value.trim(),
+        end: e.querySelector(".d-end").value.trim(),
+      })),
+    };
+  }
+
   // ── Render preview from current form state ──
 
   function render() {
-    const name = $("#f-name").value.trim();
-    const headline = $("#f-headline").value.trim();
-    const email = $("#f-email").value.trim();
-    const phone = $("#f-phone").value.trim();
-    const location = $("#f-location").value.trim();
-    const link = $("#f-link").value.trim();
-    const summary = $("#f-summary").value.trim();
-    const skillGroups = collectSkillGroups(false);
-
-    const contactParts = [email, phone, location, link].filter(Boolean);
-
-    const experience = [...document.querySelectorAll('#experience-list .entry')].map(e => ({
-      title: e.querySelector(".e-title").value.trim(),
-      company: e.querySelector(".e-company").value.trim(),
-      location: e.querySelector(".e-location").value.trim(),
-      start: e.querySelector(".e-start").value.trim(),
-      end: e.querySelector(".e-end").value.trim(),
-      bullets: e.querySelector(".e-bullets").value.split("\n").map(s => s.trim()).filter(Boolean),
-    }));
-
-    const education = [...document.querySelectorAll('#education-list .entry')].map(e => ({
-      degree: e.querySelector(".d-degree").value.trim(),
-      school: e.querySelector(".d-school").value.trim(),
-      location: e.querySelector(".d-location").value.trim(),
-      start: e.querySelector(".d-start").value.trim(),
-      end: e.querySelector(".d-end").value.trim(),
-    }));
-
-    let html = "";
-
-    html += `<div class="r-name">${escapeHtml(name) || '<span class="r-empty">Your Name</span>'}</div>`;
-    if (headline) html += `<div class="r-headline">${escapeHtml(headline)}</div>`;
-    if (contactParts.length) html += `<div class="r-contact">${contactParts.map(escapeHtml).join(" &nbsp;·&nbsp; ")}</div>`;
-
-    if (summary) {
-      html += `<div class="r-section"><h3>Summary</h3><div class="r-summary">${escapeHtml(summary)}</div></div>`;
-    }
-
-    if (experience.length) {
-      html += `<div class="r-section"><h3>Experience</h3>`;
-      experience.forEach(e => {
-        if (!e.title && !e.company) return;
-        html += `<div class="r-item">
-          <div class="r-item-top">
-            <div>
-              <div class="r-item-title">${escapeHtml(e.company)}</div>
-              <div class="r-item-sub">${escapeHtml(e.title)}${e.location ? " — " + escapeHtml(e.location) : ""}</div>
-            </div>
-            <div class="r-item-date">${escapeHtml([e.start, e.end].filter(Boolean).join(" – "))}</div>
-          </div>
-          ${e.bullets.length ? `<ul class="r-bullets">${e.bullets.map(b => `<li>${escapeHtml(b)}</li>`).join("")}</ul>` : ""}
-        </div>`;
-      });
-      html += `</div>`;
-    }
-
-    if (skillGroups.length) {
-      html += `<div class="r-section"><h3>Skills</h3><div class="r-skills-groups">${skillGroups.map(g => `<div class="r-skill-group">${g.label ? `<span class="r-skill-group-label">${escapeHtml(g.label)}: </span>` : ""}${escapeHtml(g.items.join(", "))}</div>`).join("")}</div></div>`;
-    }
-
-    if (education.length) {
-      html += `<div class="r-section"><h3>Education</h3>`;
-      education.forEach(e => {
-        if (!e.degree && !e.school) return;
-        html += `<div class="r-item">
-          <div class="r-item-top">
-            <div>
-              <div class="r-item-title">${escapeHtml(e.degree)}</div>
-              <div class="r-item-sub">${escapeHtml(e.school)}${e.location ? " — " + escapeHtml(e.location) : ""}</div>
-            </div>
-            <div class="r-item-date">${escapeHtml([e.start, e.end].filter(Boolean).join(" – "))}</div>
-          </div>
-        </div>`;
-      });
-      html += `</div>`;
-    }
-
-    preview.innerHTML = html;
+    scheduleDocxPreviewRender(collectPreviewData());
 
     // What actually gets saved/sent excludes anything still showing sample
     // placeholder text -- clicking one field only clears that field, so the
