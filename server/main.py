@@ -132,6 +132,15 @@ URL_ONLY_RE = re.compile(r"^https?://\S+$", re.I)
 MIN_USABLE_TEXT_LEN = 250  # shorter than this reads as "loading shell", not real content
 
 
+def _strip_html_to_text(body: str) -> str:
+    body = re.sub(r"<(script|style)\b[^>]*>.*?</\1>", " ", body, flags=re.I | re.S)
+    text = re.sub(r"<[^>]+>", " ", body)
+    text = html_module.unescape(text)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\s*\n\s*", "\n", text).strip()
+    return text
+
+
 async def _fetch_static_text(url: str, timeout: float = 15) -> str:
     """Cheap path: a plain server-side HTTP fetch, no JS execution. Returns
     "" on any failure -- the caller decides what to do about it (fall back to
@@ -146,13 +155,7 @@ async def _fetch_static_text(url: str, timeout: float = 15) -> str:
     except httpx.HTTPError:
         return ""
 
-    body = resp.text
-    body = re.sub(r"<(script|style)\b[^>]*>.*?</\1>", " ", body, flags=re.I | re.S)
-    text = re.sub(r"<[^>]+>", " ", body)
-    text = html_module.unescape(text)
-    text = re.sub(r"[ \t]+", " ", text)
-    text = re.sub(r"\s*\n\s*", "\n", text).strip()
-    return text
+    return _strip_html_to_text(resp.text)
 
 
 # Only one headless-browser render at a time -- this box has 1GB RAM total
@@ -189,16 +192,44 @@ async def _fetch_rendered_text(url: str, timeout: float = 25) -> str:
                 try:
                     page = await browser.new_page()
                     await page.goto(url, wait_until="networkidle", timeout=timeout * 1000)
-                    raw_text = await page.inner_text("body")
+
+                    # Best-effort cookie-banner dismiss -- some sites gate the
+                    # real content behind one, and even where they don't, a
+                    # banner sitting on top just adds noise. Fine either way
+                    # if nothing matches.
+                    for label in ("Accept all", "Accept All", "Accept", "I Agree", "Got it", "OK"):
+                        try:
+                            btn = page.get_by_role("button", name=label, exact=False)
+                            if await btn.count():
+                                await btn.first.click(timeout=1500)
+                                await page.wait_for_timeout(500)
+                                break
+                        except Exception:
+                            pass
+
+                    # Full HTML rather than inner_text: a cookie-consent modal
+                    # (or any overlay) can mark the real content
+                    # hidden/inert while it's up, which inner_text -- visible
+                    # text only -- would then miss entirely even though the
+                    # content is already in the DOM. Also walk every iframe:
+                    # ATS embeds (Workday/ADP/etc.) commonly load the actual
+                    # posting inside one, which the main frame's HTML alone
+                    # doesn't include.
+                    html_parts = [await page.content()]
+                    for frame in page.frames:
+                        if frame == page.main_frame:
+                            continue
+                        try:
+                            html_parts.append(await frame.content())
+                        except Exception:
+                            pass
                 finally:
                     await browser.close()
         except Exception:
             log.exception("headless render failed for %s", url)
             return ""
 
-    text = re.sub(r"[ \t]+", " ", raw_text)
-    text = re.sub(r"\s*\n\s*", "\n", text).strip()
-    return text
+    return "\n".join(_strip_html_to_text(h) for h in html_parts)
 
 
 async def _fetch_page_text(url: str) -> str:
