@@ -234,7 +234,9 @@ async def generate_summary(req: GenerateSummaryRequest) -> dict:
 
     jd_text = req.jd.strip()
     if URL_ONLY_RE.match(jd_text):
-        jd_text = await _fetch_page_text(jd_text)
+        source_url = jd_text
+        jd_text = await _fetch_page_text(source_url)
+        log.info("scraped %d chars from %s: %r", len(jd_text), source_url, jd_text[:400])
 
     prompt = (
         "Given the job description below, return a JSON object with three fields:\n"
@@ -256,6 +258,7 @@ async def generate_summary(req: GenerateSummaryRequest) -> dict:
         f"Job description:\n{jd_text[:6000]}"
     )
     raw = await _minimax_chat("You are a concise, expert resume writer.", prompt)
+    log.info("generate-summary raw model reply: %r", raw[:600])
 
     # Best-effort JSON parse -- strip markdown fences the model sometimes wraps
     # the object in despite the instruction not to. If parsing still fails,
