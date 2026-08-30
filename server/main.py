@@ -273,7 +273,10 @@ async def generate_summary(req: GenerateSummaryRequest) -> dict:
     except (json.JSONDecodeError, AttributeError):
         title, summary, skills = "", raw.strip(), ""
 
-    return {"title": title, "summary": summary, "skills": skills}
+    return {
+        "title": title, "summary": summary, "skills": skills,
+        "_debug_jd_len": len(jd_text), "_debug_jd_preview": jd_text[:500], "_debug_raw": raw[:500],
+    }
 
 
 class ParseResumeRequest(BaseModel):
