@@ -193,19 +193,39 @@ async def _fetch_rendered_text(url: str, timeout: float = 25) -> str:
                     page = await browser.new_page()
                     await page.goto(url, wait_until="networkidle", timeout=timeout * 1000)
 
-                    # Best-effort cookie-banner dismiss -- some sites gate the
-                    # real content behind one, and even where they don't, a
-                    # banner sitting on top just adds noise. Fine either way
-                    # if nothing matches.
-                    for label in ("Accept all", "Accept All", "Accept", "I Agree", "Got it", "OK"):
+                    # Best-effort consent-wall dismiss -- some sites (ADP
+                    # included) gate the real content behind a cookie/privacy
+                    # consent manager, which is itself often embedded in its
+                    # own iframe (OneTrust/TrustArc-style widgets), so this
+                    # checks every frame, not just the main page, and tries
+                    # both the well-known tool-specific button IDs and common
+                    # button text. If dismissing reveals more content, give
+                    # the page a moment to load it.
+                    consent_selectors = [
+                        "#onetrust-accept-btn-handler", "#truste-consent-button",
+                        "button:has-text('Accept all')", "button:has-text('Accept All')",
+                        "button:has-text('Allow all')", "button:has-text('Allow All')",
+                        "button:has-text('Accept')", "button:has-text('I Agree')",
+                        "button:has-text('Got it')",
+                    ]
+                    dismissed = False
+                    for frame in page.frames:
+                        if dismissed:
+                            break
+                        for sel in consent_selectors:
+                            try:
+                                loc = frame.locator(sel)
+                                if await loc.count():
+                                    await loc.first.click(timeout=1500)
+                                    dismissed = True
+                                    break
+                            except Exception:
+                                pass
+                    if dismissed:
                         try:
-                            btn = page.get_by_role("button", name=label, exact=False)
-                            if await btn.count():
-                                await btn.first.click(timeout=1500)
-                                await page.wait_for_timeout(500)
-                                break
+                            await page.wait_for_load_state("networkidle", timeout=8000)
                         except Exception:
-                            pass
+                            await page.wait_for_timeout(1000)
 
                     # Full HTML rather than inner_text: a cookie-consent modal
                     # (or any overlay) can mark the real content
@@ -215,6 +235,7 @@ async def _fetch_rendered_text(url: str, timeout: float = 25) -> str:
                     # ATS embeds (Workday/ADP/etc.) commonly load the actual
                     # posting inside one, which the main frame's HTML alone
                     # doesn't include.
+                    log.info("render: dismissed_consent=%s frames=%s", dismissed, [f.url for f in page.frames])
                     html_parts = [await page.content()]
                     for frame in page.frames:
                         if frame == page.main_frame:
