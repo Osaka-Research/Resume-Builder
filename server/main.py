@@ -327,7 +327,7 @@ async def generate_summary(req: GenerateSummaryRequest) -> dict:
 
     return {
         "title": title, "summary": summary, "skills": skills,
-        "_debug_jd_len": len(jd_text), "_debug_jd_preview": jd_text[:500], "_debug_raw": raw[:500],
+        "_debug_jd_len": len(jd_text), "_debug_jd_preview": jd_text[:3000], "_debug_raw": raw[:500],
     }
 
 
