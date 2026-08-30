@@ -518,6 +518,14 @@
     bv.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 
+  // Homepage shortcut: build a resume with no job attached (sample/saved
+  // data already populates the editor on load) instead of requiring a search.
+  $("#build-resume-btn").addEventListener("click", () => {
+    currentJob = null;
+    updateApplyButton();
+    showBuildView($("#build-resume-btn"));
+  });
+
   // ── Jobs search ──
 
   function escapeAttr(s) {

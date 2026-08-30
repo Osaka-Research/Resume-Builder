@@ -607,6 +607,20 @@
     max-width: 420px;
   }
 
+  .build-resume-link {
+    margin-top: 18px;
+    background: none;
+    border: none;
+    padding: 4px 0;
+    font-size: 14px;
+    color: var(--accent);
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .build-resume-link:hover { text-decoration: underline; }
+
+  #jobs-view.searched .build-resume-link { margin-top: 10px; }
+
   .jobs-search-sub input {
     flex: 1;
     min-width: 0;
@@ -912,6 +926,7 @@
         </ul>
       </div>
     </div>
+    <button type="button" class="build-resume-link" id="build-resume-btn">Build a resume →</button>
   </div>
   <div class="jobs-status-row">
     <div class="jobs-status" id="jobs-status">Search Indeed for open roles — results load here.</div>
@@ -1075,7 +1090,7 @@
      on a fresh page load. The update-check script below (for tabs already
      open when a deploy happens) is separate and doesn't rely on this. -->
 <script src="dictionary.js?v=35c2a6a0"></script>
-<script src="app.js?v=8cf0b9d"></script>
+<script src="app.js?v=587c865"></script>
 <script>
   // ── Update checker ──────────────────────────────────────────────────
   // A silent auto-reload here could wipe someone's half-filled resume
