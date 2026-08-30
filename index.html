@@ -141,18 +141,27 @@
 
   .r-contact-input { font-size: 13px; color: #000; width: auto; flex: 0 1 auto; min-width: 60px; text-align: center; }
 
-  .r-jd-tools { margin-top: 20px; font-size: 12px; color: var(--muted); }
-  .r-jd-tools summary { cursor: pointer; font-weight: 600; }
+  .r-jd-tools {
+    margin-top: 20px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fafbfd;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .r-jd-tools-label { font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 8px; }
   .r-jd-tools textarea {
     width: 100%;
-    margin-top: 8px;
     padding: 8px 10px;
     font-size: 13px;
     font-family: inherit;
     border: 1px solid var(--border);
     border-radius: 5px;
     resize: vertical;
+    background: #fff;
   }
+  .r-jd-tools .add-btn { margin-top: 10px; }
 
   .r-summary-input { font-size: 13px; line-height: 1.3; color: #000; min-height: 64px; }
 
@@ -975,12 +984,12 @@
       </div>
     </div>
 
-    <details class="r-jd-tools">
-      <summary>Paste a job description (or a link to the posting) to AI-tailor your summary and skills</summary>
+    <div class="r-jd-tools">
+      <div class="r-jd-tools-label">Paste a job description (or a link to the posting) to AI-tailor your summary and skills</div>
       <textarea id="f-jd" rows="4" placeholder="Paste the job description, or a link to the posting…"></textarea>
       <button class="add-btn" id="ai-summary-btn" type="button">✨ Generate summary & skills with AI</button>
       <div class="hint" id="ai-summary-status"></div>
-    </details>
+    </div>
 
     <div class="upload-existing">
       <div class="upload-divider"><span>or</span></div>
@@ -1082,7 +1091,7 @@
      on a fresh page load. The update-check script below (for tabs already
      open when a deploy happens) is separate and doesn't rely on this. -->
 <script src="dictionary.js?v=35c2a6a0"></script>
-<script src="app.js?v=d7dc025"></script>
+<script src="app.js?v=3217d9c"></script>
 <script>
   // ── Update checker ──────────────────────────────────────────────────
   // A silent auto-reload here could wipe someone's half-filled resume

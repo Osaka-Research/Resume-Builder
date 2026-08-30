@@ -1291,7 +1291,6 @@
       // That's the whole point of generating a resume for a specific job.
       aiGeneratedForJobKey = jobKey;
       $("#f-jd").value = description;
-      $(".r-jd-tools").open = true;
       generateSummaryAndSkills();
     } else {
       // No scraped description for this listing -- nothing to tailor to.
