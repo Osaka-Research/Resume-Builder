@@ -558,13 +558,13 @@
     }
 
     if (data.summary) {
-      children.push(sectionHeader("SUMMARY"));
+      children.push(sectionHeader("PROFESSIONAL SUMMARY"));
       children.push(new Paragraph({ text: data.summary, spacing: { after: 80 } }));
     }
 
     const experience = (data.experience || []).filter(e => e.title || e.company);
     if (experience.length) {
-      children.push(sectionHeader("EXPERIENCE"));
+      children.push(sectionHeader("WORK EXPERIENCE"));
       experience.forEach(e => {
         const lead = e.company || e.title;
         const restBits = [];
@@ -577,7 +577,7 @@
 
     const skillGroups = (data.skillGroups || []).filter(g => g.items && g.items.length);
     if (skillGroups.length) {
-      children.push(sectionHeader("SKILLS"));
+      children.push(sectionHeader("TECHNICAL SKILLS"));
       skillGroups.forEach(g => {
         children.push(new Paragraph({
           spacing: { after: 40 },
