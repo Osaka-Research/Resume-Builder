@@ -1311,7 +1311,9 @@
       statusEl.textContent = "Paste a job description above first.";
       return;
     }
+    const jdInput = $("#f-jd");
     btn.disabled = true;
+    jdInput.disabled = true;
     // The backend scrapes the page server-side when this is a bare URL
     // (the browser can't -- most job boards block cross-origin fetches).
     btn.textContent = /^https?:\/\/\S+$/i.test(jd) ? "Reading that link…" : "Generating…";
@@ -1337,12 +1339,14 @@
       }
       $("#f-summary").value = data.summary || "";
       $("#f-summary").classList.remove("mock-value");
-      if (data.skills) {
-        // AI returns one flat list -- replaces whatever categories were
-        // there with a single category rather than trying to guess how
-        // to merge into existing ones.
+      if ((data.skillGroups || []).length) {
+        // Replaces whatever categories were there with the AI's own
+        // grouping rather than trying to guess how to merge into existing
+        // ones.
         document.getElementById("skills-list").innerHTML = "";
-        addEntry("skills-list", "skill-category-template", { "sc-label": "Skills", "sc-items": data.skills });
+        data.skillGroups.forEach(g => addEntry("skills-list", "skill-category-template", {
+          "sc-label": g.label, "sc-items": (g.items || []).join(", "),
+        }));
       }
       render();
       statusEl.textContent = "";
@@ -1352,6 +1356,7 @@
       statusEl.textContent = err.message || "Couldn't generate a summary right now. Try again in a moment.";
     } finally {
       btn.disabled = false;
+      jdInput.disabled = false;
       btn.textContent = "✨ Generate summary & skills with AI";
     }
   }

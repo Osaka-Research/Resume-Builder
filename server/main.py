@@ -281,6 +281,29 @@ async def _fetch_page_text(url: str) -> str:
     return text[:8000]
 
 
+def _coerce_str(v) -> str:
+    return str(v).strip() if v is not None else ""
+
+
+def _coerce_list(v) -> list:
+    return v if isinstance(v, list) else []
+
+
+def _sanitize_skill_groups(raw_groups) -> list[dict]:
+    """Shared by /api/generate-summary and /api/parse-resume: turns the
+    model's raw skillGroups JSON into the resume builder's own
+    {label, items} shape, dropping anything malformed rather than erroring
+    the whole request over it."""
+    groups = []
+    for g in _coerce_list(raw_groups):
+        if not isinstance(g, dict):
+            continue
+        items = [_coerce_str(i) for i in _coerce_list(g.get("items")) if _coerce_str(i)]
+        if items:
+            groups.append({"label": _coerce_str(g.get("label")), "items": items})
+    return groups
+
+
 @app.post("/api/generate-summary")
 async def generate_summary(req: GenerateSummaryRequest) -> dict:
     profile_bits = []
@@ -302,10 +325,13 @@ async def generate_summary(req: GenerateSummaryRequest) -> dict:
         "description, mirroring its key requirements and keywords naturally, but staying "
         "truthful to the candidate's given profile: don't invent experience or skills that "
         "aren't implied by it.\n"
-        '"skills" -- a comma-separated list of 8-14 skills/technologies most relevant to this '
-        "specific job description, prioritizing ones already implied by the candidate's given "
-        "profile where truthful, filled out with the specific tools/technologies/methodologies "
-        "this job description itself asks for.\n"
+        '"skillGroups" -- array of {"label": category name, "items": [skill strings]}, '
+        "8-14 skills/technologies total across all groups, most relevant to this specific job "
+        "description -- prioritize ones already implied by the candidate's given profile where "
+        "truthful, filled out with the specific tools/technologies/methodologies this job "
+        'description itself asks for. Group them the way a real resume would (e.g. "Cloud '
+        'Platforms", "Programming Languages", "Data Tools") rather than one flat list -- use '
+        "whatever categories actually fit this job's skills, not a fixed set.\n"
         "The text below may be the raw text of a whole job-posting webpage (nav links, footer, "
         "unrelated boilerplate and all) rather than just the description -- find and use the "
         "actual job posting content within it, ignore the rest.\n"
@@ -322,13 +348,13 @@ async def generate_summary(req: GenerateSummaryRequest) -> dict:
     cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
     try:
         parsed = json.loads(cleaned)
-        title = str(parsed.get("title") or "").strip()
-        summary = str(parsed.get("summary") or "").strip()
-        skills = str(parsed.get("skills") or "").strip()
+        title = _coerce_str(parsed.get("title"))
+        summary = _coerce_str(parsed.get("summary"))
+        skill_groups = _sanitize_skill_groups(parsed.get("skillGroups"))
     except (json.JSONDecodeError, AttributeError):
-        title, summary, skills = "", raw.strip(), ""
+        title, summary, skill_groups = "", raw.strip(), []
 
-    return {"title": title, "summary": summary, "skills": skills}
+    return {"title": title, "summary": summary, "skillGroups": skill_groups}
 
 
 class ParseResumeRequest(BaseModel):
@@ -379,19 +405,8 @@ async def parse_resume(req: ParseResumeRequest) -> dict:
         log.error("parse-resume: model did not return a JSON object: %s", raw[:500])
         raise HTTPException(status_code=502, detail="Couldn't parse that resume -- try again, or fill the form manually.")
 
-    def _s(v) -> str:
-        return str(v).strip() if v is not None else ""
-
-    def _list(v) -> list:
-        return v if isinstance(v, list) else []
-
-    skill_groups = []
-    for g in _list(parsed.get("skillGroups")):
-        if not isinstance(g, dict):
-            continue
-        items = [_s(i) for i in _list(g.get("items")) if _s(i)]
-        if items:
-            skill_groups.append({"label": _s(g.get("label")), "items": items})
+    _s, _list = _coerce_str, _coerce_list
+    skill_groups = _sanitize_skill_groups(parsed.get("skillGroups"))
 
     experience = []
     for e in _list(parsed.get("experience")):
