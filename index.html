@@ -141,7 +141,7 @@
 
   .r-contact-input { font-size: 13px; color: #000; width: auto; flex: 0 1 auto; min-width: 60px; text-align: center; }
 
-  .r-jd-tools { margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .r-jd-tools { margin-top: 20px; font-size: 12px; color: var(--muted); }
   .r-jd-tools summary { cursor: pointer; font-weight: 600; }
   .r-jd-tools textarea {
     width: 100%;
@@ -954,12 +954,6 @@
       <div class="r-section">
         <h3>Summary</h3>
         <textarea id="f-summary" class="r-input r-summary-input" rows="3" placeholder="Write a short summary…"></textarea>
-        <details class="r-jd-tools">
-          <summary>Paste a job description to AI-tailor your summary and skills</summary>
-          <textarea id="f-jd" rows="4" placeholder="Paste the job description here…"></textarea>
-          <button class="add-btn" id="ai-summary-btn" type="button">✨ Generate summary & skills with AI</button>
-          <div class="hint" id="ai-summary-status"></div>
-        </details>
       </div>
 
       <div class="r-section">
@@ -980,6 +974,13 @@
         <button class="add-btn" id="add-education" type="button">+ Add Education</button>
       </div>
     </div>
+
+    <details class="r-jd-tools">
+      <summary>Paste a job description to AI-tailor your summary and skills</summary>
+      <textarea id="f-jd" rows="4" placeholder="Paste the job description here…"></textarea>
+      <button class="add-btn" id="ai-summary-btn" type="button">✨ Generate summary & skills with AI</button>
+      <div class="hint" id="ai-summary-status"></div>
+    </details>
 
     <div class="upload-existing">
       <div class="upload-divider"><span>or</span></div>
