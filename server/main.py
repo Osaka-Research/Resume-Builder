@@ -164,6 +164,101 @@ async def generate_summary(req: GenerateSummaryRequest) -> dict:
     return {"summary": summary, "skills": skills}
 
 
+class ParseResumeRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=20000, description="raw resume text extracted client-side from an uploaded PDF/DOCX/txt")
+
+
+@app.post("/api/parse-resume")
+async def parse_resume(req: ParseResumeRequest) -> dict:
+    """Turns raw, messily-extracted resume text into the resume builder's own
+    field shape, so an upload can fill Experience/Education/Skills instead of
+    just dumping text into Summary for the person to re-sort by hand."""
+    prompt = (
+        "Extract structured resume data from the raw text below (pulled from an uploaded "
+        "PDF/DOCX/txt, so spacing and line breaks may be imperfect). Return ONLY a JSON "
+        "object -- no markdown fences, no preamble -- with exactly these fields:\n"
+        '"name": full name (string, "" if not found)\n'
+        '"headline": target role/job title if stated near the top, else "" (string)\n'
+        '"email": (string, "" if not found)\n'
+        '"phone": (string, "" if not found)\n'
+        '"location": city/region if given, else "" (string)\n'
+        '"link": LinkedIn/GitHub/portfolio URL if present, else "" (string)\n'
+        '"summary": the professional summary/objective if present (verbatim, light cleanup '
+        "ok), else \"\" -- don't write a new one if the resume doesn't have one\n"
+        '"skillGroups": array of {"label": category name, or "" if the resume lists skills '
+        'without categories, "items": [skill strings]} -- preserve the resume\'s own category '
+        'groupings (e.g. "Cloud Platforms", "Programming Languages") if it has any, otherwise '
+        "a single group with label \"\" containing all the skills\n"
+        '"experience": array of {"title","company","location","start","end","bullets":[...]}, '
+        'most recent first; "end" is "Present" if it\'s the current role\n'
+        '"education": array of {"degree","school","location","start","end"}\n\n'
+        "Only use information actually present in the text -- never invent employers, dates, "
+        "or skills that aren't stated. Leave a field \"\" or [] if it isn't in the text.\n\n"
+        f"Resume text:\n{req.text.strip()[:12000]}"
+    )
+    raw = await _minimax_chat(
+        "You are a precise resume-parsing engine. You extract structured data verbatim from "
+        "the given text; you never invent facts.",
+        prompt,
+        timeout=45,
+    )
+
+    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
+    try:
+        parsed = json.loads(cleaned)
+        if not isinstance(parsed, dict):
+            raise ValueError("not a JSON object")
+    except (json.JSONDecodeError, ValueError):
+        log.error("parse-resume: model did not return a JSON object: %s", raw[:500])
+        raise HTTPException(status_code=502, detail="Couldn't parse that resume -- try again, or fill the form manually.")
+
+    def _s(v) -> str:
+        return str(v).strip() if v is not None else ""
+
+    def _list(v) -> list:
+        return v if isinstance(v, list) else []
+
+    skill_groups = []
+    for g in _list(parsed.get("skillGroups")):
+        if not isinstance(g, dict):
+            continue
+        items = [_s(i) for i in _list(g.get("items")) if _s(i)]
+        if items:
+            skill_groups.append({"label": _s(g.get("label")), "items": items})
+
+    experience = []
+    for e in _list(parsed.get("experience")):
+        if not isinstance(e, dict):
+            continue
+        experience.append({
+            "title": _s(e.get("title")), "company": _s(e.get("company")),
+            "location": _s(e.get("location")), "start": _s(e.get("start")), "end": _s(e.get("end")),
+            "bullets": [_s(b) for b in _list(e.get("bullets")) if _s(b)],
+        })
+
+    education = []
+    for e in _list(parsed.get("education")):
+        if not isinstance(e, dict):
+            continue
+        education.append({
+            "degree": _s(e.get("degree")), "school": _s(e.get("school")),
+            "location": _s(e.get("location")), "start": _s(e.get("start")), "end": _s(e.get("end")),
+        })
+
+    return {
+        "name": _s(parsed.get("name")),
+        "headline": _s(parsed.get("headline")),
+        "email": _s(parsed.get("email")),
+        "phone": _s(parsed.get("phone")),
+        "location": _s(parsed.get("location")),
+        "link": _s(parsed.get("link")),
+        "summary": _s(parsed.get("summary")),
+        "skillGroups": skill_groups,
+        "experience": experience,
+        "education": education,
+    }
+
+
 class RefineSearchRequest(BaseModel):
     search_term: str = Field(..., min_length=1, max_length=200)
     location: str = Field("", max_length=200)

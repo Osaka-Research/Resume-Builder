@@ -286,10 +286,72 @@
   function fillIfEmpty(id, value) {
     if (!value) return false;
     const el = $("#" + id);
-    if (el.value.trim()) return false;
+    // Sample placeholder text still counts as "empty" -- it isn't anything
+    // the visitor typed, so it's fine to overwrite; real typed text isn't.
+    if (el.value.trim() && !el.classList.contains("mock-value")) return false;
     el.value = value;
     el.classList.remove("mock-value");
     return true;
+  }
+
+  // Sends extracted resume text to the backend's AI parser, which returns
+  // the resume builder's own field shape (name/contact/summary/skillGroups/
+  // experience/education). Returns null on any failure so the caller can
+  // fall back to the old raw-text-in-Summary behavior instead of losing the
+  // extracted text entirely.
+  async function parseResumeText(text) {
+    try {
+      const res = await fetch(JOBS_API + "/api/parse-resume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: text.slice(0, 12000) }),
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  }
+
+  // Fills every section from a successful parse. Personal info/summary only
+  // overwrite empty-or-sample fields (never something the visitor already
+  // typed); Experience/Education/Skills replace whatever rows are there
+  // (sample or otherwise) since there's no per-row "already real" check --
+  // but only for a section the parse actually found something for, so a
+  // partial parse doesn't wipe sections it simply didn't return.
+  function applyParsedResume(data) {
+    fillIfEmpty("f-name", data.name);
+    fillIfEmpty("f-headline", data.headline);
+    fillIfEmpty("f-email", data.email);
+    fillIfEmpty("f-phone", data.phone);
+    fillIfEmpty("f-location", data.location);
+    fillIfEmpty("f-link", data.link);
+    if (data.summary) fillIfEmpty("f-summary", data.summary);
+
+    if ((data.experience || []).length) {
+      document.getElementById("experience-list").innerHTML = "";
+      data.experience.forEach(e => addEntry("experience-list", "experience-template", {
+        "e-title": e.title, "e-company": e.company, "e-location": e.location,
+        "e-start": e.start, "e-end": e.end, "e-bullets": (e.bullets || []).join("\n"),
+      }));
+    }
+
+    if ((data.education || []).length) {
+      document.getElementById("education-list").innerHTML = "";
+      data.education.forEach(e => addEntry("education-list", "education-template", {
+        "d-degree": e.degree, "d-school": e.school, "d-location": e.location,
+        "d-start": e.start, "d-end": e.end,
+      }));
+    }
+
+    if ((data.skillGroups || []).length) {
+      document.getElementById("skills-list").innerHTML = "";
+      data.skillGroups.forEach(g => addEntry("skills-list", "skill-category-template", {
+        "sc-label": g.label, "sc-items": (g.items || []).join(", "),
+      }));
+    }
+
+    render();
   }
 
   $("#resume-upload-input").addEventListener("change", async (e) => {
@@ -317,6 +379,18 @@
         return;
       }
 
+      setUploadStatus("Reading " + file.name + " -- filling in your resume…", true);
+      const parsed = await parseResumeText(text);
+
+      if (parsed) {
+        applyParsedResume(parsed);
+        setUploadStatus("Filled in from " + file.name + " -- please review every section before submitting.", true);
+        return;
+      }
+
+      // AI parse unavailable/failed -- fall back to the old behavior so the
+      // extracted text isn't just lost: dump it into Summary and best-effort
+      // regex-guess a few personal-info fields.
       const summaryEl = $("#f-summary");
       const note = "--- Extracted from " + file.name + " -- review and copy details into the right sections below ---\n\n";
       summaryEl.value = note + text.slice(0, 4000);
@@ -333,7 +407,7 @@
       const filledNote = filled.length
         ? ` Also guessed ${filled.join(", ")} above -- please double-check.`
         : "";
-      setUploadStatus("Extracted " + file.name + " -- dropped into Summary above for you to review." + filledNote, true);
+      setUploadStatus("Couldn't auto-fill sections right now -- dropped the extracted text into Summary instead." + filledNote, true);
     } catch (err) {
       setUploadStatus(err.message || "Couldn't extract text from that file.", false);
     }
