@@ -199,6 +199,35 @@
     return text.trim();
   }
 
+  let mammothLib = null;
+  let mammothLoadPromise = null;
+
+  // Same vendoring rationale as pdf.js above -- self-contained UMD build,
+  // same-origin, nothing a CDN outage or blocker can take down.
+  function loadMammoth() {
+    if (mammothLib) return Promise.resolve(mammothLib);
+    if (mammothLoadPromise) return mammothLoadPromise;
+    mammothLoadPromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "vendor/mammoth/mammoth.browser.min.js";
+      script.onload = () => {
+        if (window.mammoth) resolve(window.mammoth);
+        else reject(new Error("mammoth failed to initialize"));
+      };
+      script.onerror = () => reject(new Error("Couldn't load the DOCX reader"));
+      document.head.appendChild(script);
+    }).then(lib => { mammothLib = lib; return lib; })
+      .catch(err => { mammothLoadPromise = null; throw err; });
+    return mammothLoadPromise;
+  }
+
+  async function extractDocxText(file) {
+    const mammoth = await loadMammoth();
+    const buf = await file.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer: buf });
+    return result.value.trim();
+  }
+
   function readTextFile(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -273,10 +302,13 @@
       let text;
       if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
         text = await extractPdfText(file);
+      } else if (file.name.toLowerCase().endsWith(".docx") ||
+          file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+        text = await extractDocxText(file);
       } else if (file.type === "text/plain" || file.name.toLowerCase().endsWith(".txt")) {
         text = await readTextFile(file);
       } else {
-        setUploadStatus("Only PDF or .txt files can be auto-read -- fill the form manually for other formats.", false);
+        setUploadStatus("Only PDF, .docx or .txt files can be auto-read -- fill the form manually for other formats.", false);
         return;
       }
 
