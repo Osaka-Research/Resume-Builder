@@ -182,6 +182,11 @@
   .entry:hover, .entry:focus-within { background: #fafbfd; }
   .entry:last-child { margin-bottom: 0; }
 
+  /* Skill-category rows are single-line, unlike Experience/Education's
+     multi-field blocks -- the shared .entry spacing above reads as far too
+     loose between them, so tighten it here. */
+  .entry.r-skill-cat { padding: 3px 26px 3px 6px; margin-bottom: 2px; }
+
   .entry .remove-btn {
     position: absolute;
     top: 4px;
