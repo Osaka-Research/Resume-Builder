@@ -1312,7 +1312,9 @@
       return;
     }
     btn.disabled = true;
-    btn.textContent = "Generating…";
+    // The backend scrapes the page server-side when this is a bare URL
+    // (the browser can't -- most job boards block cross-origin fetches).
+    btn.textContent = /^https?:\/\/\S+$/i.test(jd) ? "Reading that link…" : "Generating…";
     statusEl.textContent = "";
     try {
       const res = await fetch(JOBS_API + "/api/generate-summary", {

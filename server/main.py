@@ -9,6 +9,7 @@ Routes:
 """
 from __future__ import annotations
 
+import html as html_module
 import json
 import logging
 import os
@@ -118,10 +119,39 @@ async def _minimax_chat(system_prompt: str, user_prompt: str, timeout: float = 3
 
 
 class GenerateSummaryRequest(BaseModel):
-    jd: str = Field(..., min_length=1, max_length=8000, description="job description text")
+    jd: str = Field(..., min_length=1, max_length=8000, description="job description text, or a URL to a job posting")
     name: str = Field("", max_length=200)
     headline: str = Field("", max_length=200)
     skills: str = Field("", max_length=500, description="comma-separated skills")
+
+
+URL_ONLY_RE = re.compile(r"^https?://\S+$", re.I)
+
+
+async def _fetch_page_text(url: str, timeout: float = 15) -> str:
+    """Fetches a URL server-side (the browser can't -- most job boards block
+    cross-origin fetches) and strips it down to plain readable text, so the
+    same AI-tailor prompt below can work from a pasted link exactly like a
+    pasted job description."""
+    try:
+        async with httpx.AsyncClient(
+            timeout=timeout, follow_redirects=True,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; ResumeBuilderBot/1.0)"},
+        ) as client:
+            resp = await client.get(url)
+        resp.raise_for_status()
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="Couldn't fetch that link -- double-check the URL and try again.")
+
+    body = resp.text
+    body = re.sub(r"<(script|style)\b[^>]*>.*?</\1>", " ", body, flags=re.I | re.S)
+    text = re.sub(r"<[^>]+>", " ", body)
+    text = html_module.unescape(text)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\s*\n\s*", "\n", text).strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="That page didn't have any readable text on it.")
+    return text[:8000]
 
 
 @app.post("/api/generate-summary")
@@ -133,6 +163,10 @@ async def generate_summary(req: GenerateSummaryRequest) -> dict:
         profile_bits.append(f"Skills: {req.skills}")
     profile = "\n".join(profile_bits) or "No extra profile details given."
 
+    jd_text = req.jd.strip()
+    if URL_ONLY_RE.match(jd_text):
+        jd_text = await _fetch_page_text(jd_text)
+
     prompt = (
         "Given the job description below, return a JSON object with two fields:\n"
         '"summary" -- a 2-3 sentence professional resume summary tailored to the job '
@@ -143,9 +177,12 @@ async def generate_summary(req: GenerateSummaryRequest) -> dict:
         "specific job description, prioritizing ones already implied by the candidate's given "
         "profile where truthful, filled out with the specific tools/technologies/methodologies "
         "this job description itself asks for.\n"
+        "The text below may be the raw text of a whole job-posting webpage (nav links, footer, "
+        "unrelated boilerplate and all) rather than just the description -- find and use the "
+        "actual job posting content within it, ignore the rest.\n"
         "Return ONLY the JSON object -- no markdown code fences, no preamble, no extra text.\n\n"
         f"Candidate profile:\n{profile}\n\n"
-        f"Job description:\n{req.jd.strip()[:6000]}"
+        f"Job description:\n{jd_text[:6000]}"
     )
     raw = await _minimax_chat("You are a concise, expert resume writer.", prompt)
 
