@@ -1318,7 +1318,13 @@
 
   // ── AI summary + skills generation, from pasted/seeded JD ──
 
+  // Bumped on every call so a slow response from a job clicked earlier can't
+  // land after a later job's request and overwrite its (already-applied)
+  // result -- same pattern as docxPreviewGeneration above.
+  let summaryGeneration = 0;
+
   async function generateSummaryAndSkills() {
+    const myGeneration = ++summaryGeneration;
     const jd = $("#f-jd").value.trim();
     const statusEl = $("#ai-summary-status");
     const btn = $("#ai-summary-btn");
@@ -1349,6 +1355,7 @@
         }),
       });
       const data = await res.json();
+      if (myGeneration !== summaryGeneration) return; // a newer job's request superseded this one
       if (!res.ok) throw new Error(data.detail || "Request failed");
       if (data.title) {
         // Tailoring to a specific job -- the headline should track it, same
@@ -1373,10 +1380,12 @@
       }
       render();
     } catch (err) {
+      if (myGeneration !== summaryGeneration) return; // a newer job's request superseded this one
       // Surface the backend's actual reason (e.g. "that page loads content
       // dynamically") rather than a generic message that hides it.
       statusEl.textContent = err.message || "Couldn't generate a summary right now. Try again in a moment.";
     } finally {
+      if (myGeneration !== summaryGeneration) return; // newer request owns the button/overlay state now
       overlay.classList.remove("active");
       btn.disabled = false;
       jdInput.disabled = false;
