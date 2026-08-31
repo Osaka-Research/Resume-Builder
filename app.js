@@ -1280,43 +1280,19 @@
     }
   }
 
-  // Tracks which job (title|company) the current summary/skills were last
-  // AI-tailored for, so a job with no scraped description can tell "stale
-  // AI text left over from a different job" apart from "person typed this
-  // by hand" instead of just leaving whatever's there unchanged either way.
-  let aiGeneratedForJobKey = null;
-
   function generateResumeForJob(title, company, description, anchorEl) {
     $("#f-headline").value = title;
     $("#f-headline").classList.remove("mock-value");
-    const jobKey = title + "|" + company;
-    if (description) {
-      // A JD is available for this job -- always AI-tailor summary/skills to
-      // it (overwriting whatever was there from a previously viewed job).
-      // That's the whole point of generating a resume for a specific job.
-      aiGeneratedForJobKey = jobKey;
-      $("#f-jd").value = description;
-      generateSummaryAndSkills();
-    } else {
-      // No scraped description for this listing -- nothing to tailor to.
-      // If the current summary/skills were AI-generated for a *different*
-      // job, they're stale, not this job's -- clear them (and the leftover
-      // JD text) instead of leaving them looking like they belong here. A
-      // hand-typed summary (never AI-generated) is left alone either way.
-      if (aiGeneratedForJobKey && aiGeneratedForJobKey !== jobKey) {
-        $("#f-summary").value = "";
-        document.getElementById("skills-list").innerHTML = "";
-        $("#f-jd").value = "";
-        aiGeneratedForJobKey = null;
-      }
-      const summaryEl = $("#f-summary");
-      if (!summaryEl.value.trim()) {
-        summaryEl.value = company
-          ? `Aiming for the ${title} role at ${company}.`
-          : `Aiming for a ${title} role.`;
-        summaryEl.classList.remove("mock-value");
-      }
-    }
+    // No scraped description for this listing -- still AI-tailor off just
+    // the title/company rather than falling back to a boilerplate one-liner.
+    // The backend prompt works fine with a thin "JD" like this; it's just
+    // less to mirror keywords from than a real posting.
+    const jd = description || (company ? `Job title: ${title} at ${company}` : `Job title: ${title}`);
+    // Always AI-tailor summary/skills to this job (overwriting whatever was
+    // there from a previously viewed job) -- that's the whole point of
+    // clicking Generate Resume for a specific job.
+    $("#f-jd").value = jd;
+    generateSummaryAndSkills();
     updateApplyButton();
     showBuildView(anchorEl);
   }
