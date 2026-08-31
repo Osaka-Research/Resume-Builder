@@ -110,7 +110,12 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      const fileBase = (data.name || "resume").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-") || "resume";
+      // Job title in the filename (from the headline, which the AI/job-click
+      // tailoring flow already sets to the target job's title) so a resume
+      // generated for one job doesn't look identical to -- or silently
+      // overwrite/get confused with -- one generated for another.
+      const slugify = s => (s || "").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-");
+      const fileBase = [slugify(data.name) || "resume", slugify(data.headline)].filter(Boolean).join("-");
       a.download = `${fileBase}.docx`;
       document.body.appendChild(a);
       a.click();
