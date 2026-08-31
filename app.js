@@ -1331,8 +1331,12 @@
     jdInput.disabled = true;
     // The backend scrapes the page server-side when this is a bare URL
     // (the browser can't -- most job boards block cross-origin fetches).
-    btn.textContent = /^https?:\/\/\S+$/i.test(jd) ? "Reading that link…" : "Generating…";
+    const isLink = /^https?:\/\/\S+$/i.test(jd);
+    btn.textContent = isLink ? "Reading that link…" : "Generating…";
     statusEl.textContent = "";
+    const overlay = $("#ai-generating-overlay");
+    $("#ai-generating-text").textContent = isLink ? "✨ Reading that job link…" : "✨ AI is writing your resume…";
+    overlay.classList.add("active");
     try {
       const res = await fetch(JOBS_API + "/api/generate-summary", {
         method: "POST",
@@ -1373,6 +1377,7 @@
       // dynamically") rather than a generic message that hides it.
       statusEl.textContent = err.message || "Couldn't generate a summary right now. Try again in a moment.";
     } finally {
+      overlay.classList.remove("active");
       btn.disabled = false;
       jdInput.disabled = false;
       btn.textContent = "✨ Generate summary & skills with AI";
