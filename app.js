@@ -1318,6 +1318,19 @@
 
   // ── AI summary + skills generation, from pasted/seeded JD ──
 
+  // FastAPI's own request-validation errors (bad field length/type, before
+  // the route body even runs) send `detail` as an array of {msg, loc, ...}
+  // objects rather than the plain string our route handlers send -- stringify
+  // straight into an Error would render as "[object Object]".
+  function extractErrorDetail(data) {
+    const d = data && data.detail;
+    if (typeof d === "string" && d) return d;
+    if (Array.isArray(d) && d.length) {
+      return d.map(e => (e && e.msg) || "Invalid request").join("; ");
+    }
+    return "Request failed";
+  }
+
   // Bumped on every call so a slow response from a job clicked earlier can't
   // land after a later job's request and overwrite its (already-applied)
   // result -- same pattern as docxPreviewGeneration above.
@@ -1356,7 +1369,7 @@
       });
       const data = await res.json();
       if (myGeneration !== summaryGeneration) return; // a newer job's request superseded this one
-      if (!res.ok) throw new Error(data.detail || "Request failed");
+      if (!res.ok) throw new Error(extractErrorDetail(data));
       if (data.title) {
         // Tailoring to a specific job -- the headline should track it, same
         // as clicking "Generate Resume" from a job search result does.
