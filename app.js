@@ -976,7 +976,7 @@
     logJobClick(el.dataset.clickAction, job);
     if (el.dataset.clickAction === "generate_resume") {
       currentJob = job;
-      generateResumeForJob(job.title, job.company, full ? full.description : "", el.closest(".job-card"));
+      generateResumeForJob(job.title, full ? full.description : "", el.closest(".job-card"));
     } else if (el.dataset.clickAction === "share_job") {
       shareJob(job, el);
     } else if (el.dataset.clickAction === "view_job") {
@@ -1011,7 +1011,7 @@
 
   $("#jd-generate-btn").addEventListener("click", () => {
     logJobClick("generate_resume", currentJob);
-    generateResumeForJob(currentJob.title, currentJob.company, currentJobDescription, $(".job-detail-actions"));
+    generateResumeForJob(currentJob.title, currentJobDescription, $(".job-detail-actions"));
   });
 
   $("#apply-job-btn").addEventListener("click", () => {
@@ -1280,14 +1280,15 @@
     }
   }
 
-  function generateResumeForJob(title, company, description, anchorEl) {
+  function generateResumeForJob(title, description, anchorEl) {
     $("#f-headline").value = title;
     $("#f-headline").classList.remove("mock-value");
     // No scraped description for this listing -- still AI-tailor off just
-    // the title/company rather than falling back to a boilerplate one-liner.
-    // The backend prompt works fine with a thin "JD" like this; it's just
-    // less to mirror keywords from than a real posting.
-    const jd = description || (company ? `Job title: ${title} at ${company}` : `Job title: ${title}`);
+    // the title rather than falling back to a boilerplate one-liner. Company
+    // is deliberately left out: with this little else to go on, the model
+    // tends to parrot "at Company" straight into the candidate's own summary
+    // instead of treating it as unusable-for-tailoring context.
+    const jd = description || `Job title: ${title}`;
     // Always AI-tailor summary/skills to this job (overwriting whatever was
     // there from a previously viewed job) -- that's the whole point of
     // clicking Generate Resume for a specific job.
