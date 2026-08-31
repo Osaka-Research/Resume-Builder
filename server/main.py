@@ -120,7 +120,7 @@ async def _minimax_chat(system_prompt: str, user_prompt: str, timeout: float = 3
 
 
 class GenerateSummaryRequest(BaseModel):
-    jd: str = Field(..., min_length=1, max_length=8000, description="job description text, or a URL to a job posting")
+    jd: str = Field(..., min_length=1, max_length=20000, description="job description text, or a URL to a job posting")
     name: str = Field("", max_length=200)
     headline: str = Field("", max_length=200)
     skills: str = Field("", max_length=500, description="comma-separated skills")
